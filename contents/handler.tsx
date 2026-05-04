@@ -123,7 +123,9 @@ const Handler = () => {
           }
         }
         
-        const tokenData = data.result?.[actualCa.toLowerCase()]
+        // GoPlus result key bisa case-sensitive atau lowercase tergantung network.
+        // Kita ambil value pertama saja karena kita cuma request satu address.
+        const tokenData = data.result ? Object.values(data.result)[0] as any : null
         
         if (tokenData) {
           if (tokenData.mintable?.status === '1') {
@@ -137,6 +139,9 @@ const Handler = () => {
           if (tokenData.metadata?.symbol) {
             ticker = tokenData.metadata.symbol
           }
+        } else {
+          // Fallback ticker dari Token CA yang sudah di-resolve
+          ticker = actualCa.slice(0, 4).toUpperCase()
         }
       } catch (e) {
         console.error("Fetch error:", e)
