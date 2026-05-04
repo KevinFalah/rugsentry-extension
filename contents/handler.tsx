@@ -98,20 +98,23 @@ const Handler = () => {
     setStatus("scanning")
     
     if (detectedCa) {
+      let currentScore = 100
+      let isMintable = false
+      let isFreezable = false
+      let actualCa = detectedCa
+      let ticker = detectedCa.slice(0, 4).toUpperCase()
+
       try {
-        let actualCa = detectedCa
         let res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
         let data = await res.json()
         
-        // Jika API GoPlus me-return 7012 (Not spl token), kemungkinan besar itu adalah Pair Address (sering terjadi di DexScreener).
-        // Kita gunakan DexScreener API untuk mencari tahu Token Address aslinya dari Pair tersebut.
+        // Jika API GoPlus me-return 7012 (Not spl token), kemungkinan besar itu adalah Pair Address
         if (data.code === 7012) {
           try {
             const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${detectedCa}`)
             const dexData = await dexRes.json()
             if (dexData.pairs?.[0]?.baseToken?.address) {
               actualCa = dexData.pairs[0].baseToken.address
-              // Coba fetch ke GoPlus lagi dengan Token Address asli
               res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
               data = await res.json()
             }
@@ -122,12 +125,7 @@ const Handler = () => {
         
         const tokenData = data.result?.[actualCa.toLowerCase()]
         
-        let currentScore = 100
-        let isMintable = false
-        let isFreezable = false
-
         if (tokenData) {
-          // Solana endpoint returns object for mintable & freezable: { status: "0" }
           if (tokenData.mintable?.status === '1') {
             currentScore -= 40
             isMintable = true
@@ -136,30 +134,33 @@ const Handler = () => {
             currentScore -= 40
             isFreezable = true
           }
-          
-          setScanData({ score: currentScore, mintable: isMintable, freezable: isFreezable })
-
-          // Persistence
-          const scanResult = {
-            id: Date.now().toString(),
-            ticker: tokenData.metadata?.symbol || actualCa.slice(0, 4).toUpperCase(),
-            ca: actualCa,
-            url: window.location.href,
-            score: currentScore,
-            timestamp: "Just now",
-            risk: currentScore >= 80 ? "low" : currentScore >= 50 ? "medium" : "high",
-            network: window.location.hostname
+          if (tokenData.metadata?.symbol) {
+            ticker = tokenData.metadata.symbol
           }
-          
-          const history = await storage.get<any[]>("scan_history") || []
-          await storage.set("scan_history", [scanResult, ...history].slice(0, 10))
-        } else {
-          // Fallback if token not found
-          setScanData({ score: 100, mintable: false, freezable: false })
         }
       } catch (e) {
         console.error("Fetch error:", e)
-        setScanData({ score: 100, mintable: false, freezable: false })
+      }
+
+      setScanData({ score: currentScore, mintable: isMintable, freezable: isFreezable })
+
+      // Persistence selalu dijalankan meskipun token tidak ada di database GoPlus
+      try {
+        const scanResult = {
+          id: Date.now().toString(),
+          ticker: ticker,
+          ca: actualCa,
+          url: window.location.href,
+          score: currentScore,
+          timestamp: "Just now",
+          risk: currentScore >= 80 ? "low" : currentScore >= 50 ? "medium" : "high" as const,
+          network: window.location.hostname
+        }
+        
+        const history = await storage.get<any[]>("scan_history") || []
+        await storage.set("scan_history", [scanResult, ...history].slice(0, 10))
+      } catch (e) {
+        console.error("Storage error:", e)
       }
     }
     
