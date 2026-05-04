@@ -70,6 +70,7 @@ const Handler = () => {
   const [status, setStatus] = useState<"idle" | "scanning" | "done">("idle")
   const [ca, setCa] = useState("")
   const [showBadge] = useStorage("show_badge", true)
+  const [scanData, setScanData] = useState({ score: 100, mintable: false, freezable: false })
 
   // Function to extract CA from URL
   const extractCA = () => {
@@ -96,33 +97,74 @@ const Handler = () => {
     const detectedCa = extractCA()
     setStatus("scanning")
     
-    // Simulate 1.5s scan
-    setTimeout(async () => {
-      setStatus("done")
-      setIsOpen(true)
-      
-      // Persistence: Save to storage only if valid CA
-      if (detectedCa) {
-        const scanResult = {
-          id: Date.now().toString(),
-          ticker: detectedCa.slice(0, 4).toUpperCase(), // Placeholder ticker
-          ca: detectedCa,
-          url: window.location.href, // Save URL for Re-scan
-          score: 92,
-          timestamp: "Just now",
-          risk: "low" as const,
-          network: window.location.hostname
+    if (detectedCa) {
+      try {
+        let actualCa = detectedCa
+        let res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
+        let data = await res.json()
+        
+        // Jika API GoPlus me-return 7012 (Not spl token), kemungkinan besar itu adalah Pair Address (sering terjadi di DexScreener).
+        // Kita gunakan DexScreener API untuk mencari tahu Token Address aslinya dari Pair tersebut.
+        if (data.code === 7012) {
+          try {
+            const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${detectedCa}`)
+            const dexData = await dexRes.json()
+            if (dexData.pairs?.[0]?.baseToken?.address) {
+              actualCa = dexData.pairs[0].baseToken.address
+              // Coba fetch ke GoPlus lagi dengan Token Address asli
+              res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
+              data = await res.json()
+            }
+          } catch (dexErr) {
+            console.error("DexScreener resolution failed:", dexErr)
+          }
         }
         
-        try {
-          // Use Plasmo Storage for reactivity with the popup
+        const tokenData = data.result?.[actualCa.toLowerCase()]
+        
+        let currentScore = 100
+        let isMintable = false
+        let isFreezable = false
+
+        if (tokenData) {
+          // Solana endpoint returns object for mintable & freezable: { status: "0" }
+          if (tokenData.mintable?.status === '1') {
+            currentScore -= 40
+            isMintable = true
+          }
+          if (tokenData.freezable?.status === '1') {
+            currentScore -= 40
+            isFreezable = true
+          }
+          
+          setScanData({ score: currentScore, mintable: isMintable, freezable: isFreezable })
+
+          // Persistence
+          const scanResult = {
+            id: Date.now().toString(),
+            ticker: tokenData.metadata?.symbol || actualCa.slice(0, 4).toUpperCase(),
+            ca: actualCa,
+            url: window.location.href,
+            score: currentScore,
+            timestamp: "Just now",
+            risk: currentScore >= 80 ? "low" : currentScore >= 50 ? "medium" : "high",
+            network: window.location.hostname
+          }
+          
           const history = await storage.get<any[]>("scan_history") || []
           await storage.set("scan_history", [scanResult, ...history].slice(0, 10))
-        } catch (e) {
-          console.error("Storage error:", e)
+        } else {
+          // Fallback if token not found
+          setScanData({ score: 100, mintable: false, freezable: false })
         }
+      } catch (e) {
+        console.error("Fetch error:", e)
+        setScanData({ score: 100, mintable: false, freezable: false })
       }
-    }, 1500)
+    }
+    
+    setStatus("done")
+    setIsOpen(true)
   }
 
   const isValidCA = ca !== ""
@@ -166,21 +208,38 @@ const Handler = () => {
               <div className="flex justify-center mb-8 relative">
                 <svg width="180" height="100" viewBox="0 0 160 90" className="overflow-visible">
                   <path d="M 10 80 A 70 70 0 0 1 150 80" fill="none" stroke="#1e293b" strokeWidth="12" strokeLinecap="round" />
-                  <path d="M 10 80 A 70 70 0 0 1 150 80" fill="none" stroke="#22C55E" strokeWidth="12" strokeLinecap="round" strokeDasharray="220" strokeDashoffset={17.6} className="drop-shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                  <path 
+                    d="M 10 80 A 70 70 0 0 1 150 80" 
+                    fill="none" 
+                    stroke={scanData.score >= 80 ? "#22C55E" : scanData.score >= 50 ? "#F1A02B" : "#EF4444"} 
+                    strokeWidth="12" 
+                    strokeLinecap="round" 
+                    strokeDasharray="220" 
+                    strokeDashoffset={220 - (220 * scanData.score / 100)} 
+                    className="transition-all duration-1000 ease-out" 
+                    style={{ filter: `drop-shadow(0 0 8px ${scanData.score >= 80 ? 'rgba(34,197,94,0.6)' : scanData.score >= 50 ? 'rgba(241,160,43,0.6)' : 'rgba(239,68,68,0.6)'})` }}
+                  />
                 </svg>
                 <div className="absolute bottom-1 left-0 right-0 text-center flex flex-col items-center">
-                  <span className="text-4xl font-bold text-white leading-none">92</span>
+                  <span className="text-4xl font-bold text-white leading-none">{scanData.score}</span>
                   <span className="text-[10px] text-slate-400 font-bold tracking-widest mt-1">SAFETY SCORE</span>
                 </div>
               </div>
 
               <div className="flex flex-col gap-2.5 mb-6">
                 {[
-                  { label: "Liquidity Burned", icon: <CheckCircleIcon className="w-5 h-5 text-success drop-shadow-[0_0_5px_rgba(34,197,94,0.4)]" /> },
-                  { label: "Mint Authority Disabled", icon: <CheckCircleIcon className="w-5 h-5 text-success drop-shadow-[0_0_5px_rgba(34,197,94,0.4)]" /> },
-                  { label: "Top 10 Holders Conc.", icon: <AlertTriangleIcon className="w-5 h-5 text-warning drop-shadow-[0_0_5px_rgba(241,160,43,0.4)]" />, warning: true }
+                  { 
+                    label: scanData.mintable ? "Mint Authority Enabled" : "Mint Authority Disabled", 
+                    icon: scanData.mintable ? <AlertTriangleIcon className="w-5 h-5 text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-5 h-5 text-success drop-shadow-[0_0_5px_rgba(34,197,94,0.4)]" />, 
+                    danger: scanData.mintable 
+                  },
+                  { 
+                    label: scanData.freezable ? "Freezable Enabled" : "Not Freezable", 
+                    icon: scanData.freezable ? <AlertTriangleIcon className="w-5 h-5 text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-5 h-5 text-success drop-shadow-[0_0_5px_rgba(34,197,94,0.4)]" />, 
+                    danger: scanData.freezable 
+                  }
                 ].map((item, idx) => (
-                  <div key={idx} className={`flex justify-between items-center bg-slate-800/50 rounded-xl p-3.5 border ${item.warning ? 'border-warning/30' : 'border-slate-700/30'}`}>
+                  <div key={idx} className={`flex justify-between items-center bg-slate-800/50 rounded-xl p-3.5 border transition-colors ${item.danger ? 'border-red-500/30 bg-red-500/10' : 'border-slate-700/30'}`}>
                     <span className="text-sm text-slate-200 font-medium">{item.label}</span>
                     {item.icon}
                   </div>
