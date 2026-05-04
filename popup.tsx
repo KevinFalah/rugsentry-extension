@@ -1,24 +1,154 @@
-import { useState } from "react"
+import { Shield, Zap, X, History, Bell } from "lucide-react"
+import { Storage } from "@plasmohq/storage"
+import { useStorage } from "@plasmohq/storage/hook"
+import "./style.css"
+
+interface ScanHistory {
+  id: string
+  ticker: string
+  logo?: string
+  url?: string
+  timestamp: string
+  risk: "low" | "high" | "medium"
+}
+
+const localStorage = new Storage({ area: "local" })
 
 function IndexPopup() {
-  const [data, setData] = useState("")
+  const [showBadge, setShowBadge] = useStorage("show_badge", true)
+  const [history] = useStorage<ScanHistory[]>(
+    {
+      key: "scan_history",
+      instance: localStorage
+    },
+    []
+  )
+
+  const handleRescan = (url?: string) => {
+    if (url) {
+      chrome.tabs.create({ url })
+    }
+  }
 
   return (
-    <div
-      style={{
-        padding: 16
-      }}>
-      <h2>
-        Welcome to your{" "}
-        <a href="https://www.plasmo.com" target="_blank">
-          Plasmo
-        </a>{" "}
-        Extension!
-      </h2>
-      <input onChange={(e) => setData(e.target.value)} value={data} />
-      <a href="https://docs.plasmo.com" target="_blank">
-        View Docs
-      </a>
+    <div className="w-[350px] h-[500px] bg-neutral text-slate-200 flex flex-col font-sans">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 pb-2">
+        <div className="flex items-center gap-2">
+          <div className="bg-primary p-1.5 rounded-lg text-neutral">
+            <Shield className="w-5 h-5 fill-current" />
+          </div>
+          <h1 className="text-white font-bold text-base">Rugsentry Home</h1>
+        </div>
+        <button 
+          onClick={() => window.close()}
+          className="text-slate-400 hover:text-white transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* UI Settings */}
+      <div className="mx-4 my-2 p-3.5 bg-slate-800/40 rounded-xl flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Zap className="w-5 h-5 text-success fill-success/20" />
+          <div>
+            <h2 className="text-sm font-semibold text-slate-200">Floating Badge</h2>
+            <p className="text-xs text-slate-500">Show shield on DEX pages</p>
+          </div>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            className="sr-only peer"
+            checked={showBadge}
+            onChange={(e) => setShowBadge(e.target.checked)}
+          />
+          <div className="w-10 h-5 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-success"></div>
+        </label>
+      </div>
+
+      {/* Recent Scans History */}
+      <div className="flex-1 overflow-y-auto px-4 mt-3 pb-4">
+        <h3 className="text-[10px] font-bold text-slate-500 mb-3 uppercase tracking-widest">
+          RECENT SCANS
+        </h3>
+        
+        {(history || []).length > 0 ? (
+          <div className="space-y-2">
+            {(history || []).map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between p-3 bg-slate-800/30 rounded-xl border border-slate-700/30 hover:bg-slate-800/50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  {/* Logo Token */}
+                  <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center overflow-hidden border border-slate-700/50">
+                    {item.logo ? (
+                      <img src={item.logo} className="w-full h-full object-cover" alt={item.ticker} />
+                    ) : (
+                      <div className="text-xs font-bold text-primary">
+                        {item.ticker.charAt(0)}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      {/* Nama/Ticker */}
+                      <span className="text-sm font-bold text-slate-200">
+                        {item.ticker}
+                      </span>
+                      {/* Indikator Risiko */}
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          item.risk === "low" ? "bg-success" : "bg-red-500"
+                        }`}
+                      ></span>
+                    </div>
+                    {/* Timestamp */}
+                    <div className="text-[10px] font-medium text-slate-500">
+                      {item.timestamp}
+                    </div>
+                  </div>
+                </div>
+                {/* Tombol Re-scan */}
+                <button 
+                  onClick={() => handleRescan(item.url)}
+                  className="px-3 py-1.5 text-xs font-medium text-primary border border-primary/20 rounded-lg hover:bg-primary/10 transition-colors"
+                >
+                  Re-scan
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* Empty State */
+          <div className="flex flex-col items-center justify-center py-8 text-center px-4">
+            <div className="w-12 h-12 rounded-full bg-slate-800/50 flex items-center justify-center mb-3">
+              <History className="w-6 h-6 text-slate-500" />
+            </div>
+            <p className="text-sm text-slate-400">
+              No recent scans. Start exploring tokens on DexScreener to see results here!
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Navigation */}
+      <div className="mt-auto border-t border-slate-800 bg-neutral py-2 flex justify-around rounded-b-xl">
+        <button className="flex flex-col items-center gap-1 p-2 text-primary">
+          <Shield className="w-5 h-5 fill-current/20" />
+          <span className="text-[9px] font-bold tracking-wider">SCAN</span>
+        </button>
+        <button className="flex flex-col items-center gap-1 p-2 text-slate-500 hover:text-slate-300 transition-colors">
+          <History className="w-5 h-5" />
+          <span className="text-[9px] font-bold tracking-wider">HISTORY</span>
+        </button>
+        <button className="flex flex-col items-center gap-1 p-2 text-slate-500 hover:text-slate-300 transition-colors">
+          <Bell className="w-5 h-5" />
+          <span className="text-[9px] font-bold tracking-wider">ALERTS</span>
+        </button>
+      </div>
     </div>
   )
 }
