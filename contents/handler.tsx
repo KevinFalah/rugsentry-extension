@@ -2,6 +2,7 @@ import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 import type { PlasmoCSConfig } from "plasmo"
 import { useState } from "react"
+import { calculateSecurityScore, extractCAFromUrl, resolvePairAddress } from "~lib/scanner-utils"
 export { getStyle } from "./style"
 
 const storage = new Storage({
@@ -75,20 +76,9 @@ const Handler = () => {
   // Function to extract CA from URL
   const extractCA = () => {
     const url = window.location.href
-    let detectedCa = ""
-    
-    if (url.includes("dexscreener.com")) {
-      const parts = url.split("/")
-      detectedCa = parts[parts.length - 1] || ""
-    } else if (url.includes("birdeye.so") || url.includes("pump.fun")) {
-      const parts = url.split("/")
-      detectedCa = parts[parts.length - 1]?.split("?")[0] || ""
-    }
-    
-    // Simple validation for Solana/EVM address length
-    const isValid = detectedCa.length >= 32
-    setCa(isValid ? detectedCa : "")
-    return isValid ? detectedCa : ""
+    const detectedCa = extractCAFromUrl(url)
+    setCa(detectedCa)
+    return detectedCa
   }
 
   const handleScan = async () => {
@@ -98,74 +88,49 @@ const Handler = () => {
     setStatus("scanning")
     
     if (detectedCa) {
-      let currentScore = 100
-      let isMintable = false
-      let isFreezable = false
-      let actualCa = detectedCa
-      let ticker = detectedCa.slice(0, 4).toUpperCase()
-
       try {
+        let actualCa = detectedCa
         let res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
         let data = await res.json()
         
         // Jika API GoPlus me-return 7012 (Not spl token), kemungkinan besar itu adalah Pair Address
         if (data.code === 7012) {
-          try {
-            const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${detectedCa}`)
-            const dexData = await dexRes.json()
-            if (dexData.pairs?.[0]?.baseToken?.address) {
-              actualCa = dexData.pairs[0].baseToken.address
-              res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
-              data = await res.json()
-            }
-          } catch (dexErr) {
-            console.error("DexScreener resolution failed:", dexErr)
-          }
+          actualCa = await resolvePairAddress(detectedCa)
+          res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
+          data = await res.json()
         }
         
-        // GoPlus result key bisa case-sensitive atau lowercase tergantung network.
-        // Kita ambil value pertama saja karena kita cuma request satu address.
         const tokenData = data.result ? Object.values(data.result)[0] as any : null
-        
-        if (tokenData) {
-          if (tokenData.mintable?.status === '1') {
-            currentScore -= 40
-            isMintable = true
+        const result = calculateSecurityScore(tokenData, actualCa)
+
+        setScanData({ 
+          score: result.score, 
+          mintable: result.mintable, 
+          freezable: result.freezable 
+        })
+
+        // Persistence
+        try {
+          const scanResult = {
+            id: Date.now().toString(),
+            ticker: result.ticker,
+            ca: actualCa,
+            url: window.location.href,
+            score: result.score,
+            timestamp: "Just now",
+            risk: result.risk,
+            network: window.location.hostname
           }
-          if (tokenData.freezable?.status === '1') {
-            currentScore -= 40
-            isFreezable = true
-          }
-          if (tokenData.metadata?.symbol) {
-            ticker = tokenData.metadata.symbol
-          }
-        } else {
-          // Fallback ticker dari Token CA yang sudah di-resolve
-          ticker = actualCa.slice(0, 4).toUpperCase()
+          
+          const history = await storage.get<any[]>("scan_history") || []
+          await storage.set("scan_history", [scanResult, ...history].slice(0, 10))
+        } catch (e) {
+          console.error("Storage error:", e)
         }
       } catch (e) {
-        console.error("Fetch error:", e)
-      }
-
-      setScanData({ score: currentScore, mintable: isMintable, freezable: isFreezable })
-
-      // Persistence selalu dijalankan meskipun token tidak ada di database GoPlus
-      try {
-        const scanResult = {
-          id: Date.now().toString(),
-          ticker: ticker,
-          ca: actualCa,
-          url: window.location.href,
-          score: currentScore,
-          timestamp: "Just now",
-          risk: currentScore >= 80 ? "low" : currentScore >= 50 ? "medium" : "high" as const,
-          network: window.location.hostname
-        }
-        
-        const history = await storage.get<any[]>("scan_history") || []
-        await storage.set("scan_history", [scanResult, ...history].slice(0, 10))
-      } catch (e) {
-        console.error("Storage error:", e)
+        console.error("Scan error:", e)
+        // Fallback UI jika terjadi error fatal
+        setScanData({ score: 100, mintable: false, freezable: false })
       }
     }
     
