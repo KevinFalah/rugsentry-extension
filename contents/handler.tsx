@@ -1,7 +1,7 @@
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 import type { PlasmoCSConfig } from "plasmo"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { calculateSecurityScore, extractCAFromUrl, resolvePairAddress } from "~lib/scanner-utils"
 export { getStyle } from "./style"
 
@@ -70,6 +70,7 @@ const Handler = () => {
   const [isOpen, setIsOpen] = useState(false)
   const [status, setStatus] = useState<"idle" | "scanning" | "done">("idle")
   const [ca, setCa] = useState("")
+  const [currentUrl, setCurrentUrl] = useState(window.location.href)
   const [showBadge] = useStorage("show_badge", true)
   const [scanData, setScanData] = useState({ score: 100, mintable: false, freezable: false, ticker: "" })
 
@@ -81,18 +82,42 @@ const Handler = () => {
     return detectedCa
   }
 
+  // Auto-reset logic when navigating in SPAs (DexScreener, Birdeye, etc.)
+  useEffect(() => {
+    const checkUrlChange = () => {
+      const newUrl = window.location.href
+      if (newUrl !== currentUrl) {
+        const oldCaFromUrl = extractCAFromUrl(currentUrl)
+        const newCaFromUrl = extractCAFromUrl(newUrl)
+        
+        // Hanya reset jika CA yang terdeteksi di URL benar-benar berubah
+        if (newCaFromUrl !== oldCaFromUrl) {
+          setStatus("idle")
+          setIsOpen(false)
+          setScanData({ score: 100, mintable: false, freezable: false, ticker: "" })
+        }
+        
+        setCa(newCaFromUrl)
+        setCurrentUrl(newUrl)
+      }
+    }
+
+    const interval = setInterval(checkUrlChange, 1000)
+    return () => clearInterval(interval)
+  }, [currentUrl])
+
   const handleScan = async () => {
     if (status === "scanning") return
-    
+
     const detectedCa = extractCA()
     setStatus("scanning")
-    
+
     if (detectedCa) {
       try {
         let actualCa = detectedCa
         let res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
         let data = await res.json()
-        
+
         // Jika API GoPlus me-return 7012 (Not spl token) atau 7013 (Address format error),
         // kemungkinan besar itu adalah Pair Address atau URL-nya membuat CA menjadi lowercase.
         if (data.code === 7012 || data.code === 7013) {
@@ -100,14 +125,14 @@ const Handler = () => {
           res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
           data = await res.json()
         }
-        
+
         const tokenData = data.result ? Object.values(data.result)[0] as any : null
         const result = calculateSecurityScore(tokenData, actualCa)
 
         setCa(actualCa) // Pastikan state ca selalu berisi Token CA (bukan Pair) untuk Jupiter
-        setScanData({ 
-          score: result.score, 
-          mintable: result.mintable, 
+        setScanData({
+          score: result.score,
+          mintable: result.mintable,
           freezable: result.freezable,
           ticker: result.ticker
         })
@@ -124,7 +149,7 @@ const Handler = () => {
             risk: result.risk,
             network: window.location.hostname
           }
-          
+
           const history = await storage.get<any[]>("scan_history") || []
           await storage.set("scan_history", [scanResult, ...history].slice(0, 10))
         } catch (e) {
@@ -136,7 +161,7 @@ const Handler = () => {
         setScanData({ score: 100, mintable: false, freezable: false })
       }
     }
-    
+
     setStatus("done")
     setIsOpen(true)
   }
@@ -151,7 +176,7 @@ const Handler = () => {
       {isOpen && status === "done" && (
         <div className="absolute bottom-16 right-0 w-[340px] bg-neutral/85 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl overflow-hidden mb-4 transform origin-bottom-right transition-all duration-300 ease-out animate-in slide-in-from-bottom-4">
           <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isValidCA ? 'bg-success shadow-[0_0_10px_#22C55E]' : 'bg-warning shadow-[0_0_10px_#F1A02B]'}`}></div>
-          
+
           <div className="flex justify-between items-start mb-6">
             <div className="flex flex-col gap-0.5">
               <h2 className="text-white font-bold text-xl tracking-tight leading-tight">
@@ -166,11 +191,10 @@ const Handler = () => {
               )}
               {isValidCA && (
                 <div className="flex items-center gap-2 mt-2.5">
-                  <span className={`px-2 py-1 rounded text-[10px] font-extrabold border flex items-center gap-1.5 tracking-widest uppercase transition-all duration-500 ${
-                    scanData.score >= 80 ? 'bg-success/10 text-success border-success/20' : 
-                    scanData.score >= 50 ? 'bg-warning/10 text-warning border-warning/20' : 
-                    'bg-red-500/10 text-red-500 border-red-500/20'
-                  }`}>
+                  <span className={`px-2 py-1 rounded text-[10px] font-extrabold border flex items-center gap-1.5 tracking-widest uppercase transition-all duration-500 ${scanData.score >= 80 ? 'bg-success/10 text-success border-success/20' :
+                      scanData.score >= 50 ? 'bg-warning/10 text-warning border-warning/20' :
+                        'bg-red-500/10 text-red-500 border-red-500/20'
+                    }`}>
                     {scanData.score >= 80 ? <ShieldIcon className="w-3 h-3" /> : <AlertTriangleIcon className="w-3 h-3" />}
                     {scanData.score >= 80 ? 'HIGH TRUST' : scanData.score >= 50 ? 'MEDIUM RISK' : 'DANGER'}
                   </span>
@@ -195,15 +219,15 @@ const Handler = () => {
               <div className="flex justify-center mb-8 relative">
                 <svg width="180" height="100" viewBox="0 0 160 90" className="overflow-visible">
                   <path d="M 10 80 A 70 70 0 0 1 150 80" fill="none" stroke="#1e293b" strokeWidth="12" strokeLinecap="round" />
-                  <path 
-                    d="M 10 80 A 70 70 0 0 1 150 80" 
-                    fill="none" 
-                    stroke={scanData.score >= 80 ? "#22C55E" : scanData.score >= 50 ? "#F1A02B" : "#EF4444"} 
-                    strokeWidth="12" 
-                    strokeLinecap="round" 
-                    strokeDasharray="220" 
-                    strokeDashoffset={220 - (220 * scanData.score / 100)} 
-                    className="transition-all duration-1000 ease-out" 
+                  <path
+                    d="M 10 80 A 70 70 0 0 1 150 80"
+                    fill="none"
+                    stroke={scanData.score >= 80 ? "#22C55E" : scanData.score >= 50 ? "#F1A02B" : "#EF4444"}
+                    strokeWidth="12"
+                    strokeLinecap="round"
+                    strokeDasharray="220"
+                    strokeDashoffset={220 - (220 * scanData.score / 100)}
+                    className="transition-all duration-1000 ease-out"
                     style={{ filter: `drop-shadow(0 0 8px ${scanData.score >= 80 ? 'rgba(34,197,94,0.6)' : scanData.score >= 50 ? 'rgba(241,160,43,0.6)' : 'rgba(239,68,68,0.6)'})` }}
                   />
                 </svg>
@@ -215,15 +239,15 @@ const Handler = () => {
 
               <div className="flex flex-col gap-2.5 mb-6">
                 {[
-                  { 
-                    label: scanData.mintable ? "Mint Authority Enabled" : "Mint Authority Disabled", 
-                    icon: scanData.mintable ? <AlertTriangleIcon className="w-5 h-5 text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-5 h-5 text-success drop-shadow-[0_0_5px_rgba(34,197,94,0.4)]" />, 
-                    danger: scanData.mintable 
+                  {
+                    label: scanData.mintable ? "Mint Authority Enabled" : "Mint Authority Disabled",
+                    icon: scanData.mintable ? <AlertTriangleIcon className="w-5 h-5 text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-5 h-5 text-success drop-shadow-[0_0_5px_rgba(34,197,94,0.4)]" />,
+                    danger: scanData.mintable
                   },
-                  { 
-                    label: scanData.freezable ? "Freezable Enabled" : "Not Freezable", 
-                    icon: scanData.freezable ? <AlertTriangleIcon className="w-5 h-5 text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-5 h-5 text-success drop-shadow-[0_0_5px_rgba(34,197,94,0.4)]" />, 
-                    danger: scanData.freezable 
+                  {
+                    label: scanData.freezable ? "Freezable Enabled" : "Not Freezable",
+                    icon: scanData.freezable ? <AlertTriangleIcon className="w-5 h-5 text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-5 h-5 text-success drop-shadow-[0_0_5px_rgba(34,197,94,0.4)]" />,
+                    danger: scanData.freezable
                   }
                 ].map((item, idx) => (
                   <div key={idx} className={`flex justify-between items-center bg-slate-800/50 rounded-xl p-3.5 border transition-colors ${item.danger ? 'border-red-500/30 bg-red-500/10' : 'border-slate-700/30'}`}>
@@ -233,14 +257,13 @@ const Handler = () => {
                 ))}
               </div>
 
-              <button 
+              <button
                 onClick={() => window.open(`https://jup.ag/swap?sell=${ca}&buy=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`, '_blank')}
                 disabled={status === "scanning" || !isValidCA}
-                className={`w-full font-bold py-3.5 rounded-xl flex justify-center items-center gap-2 transition-all ${
-                  status === "scanning" || !isValidCA
+                className={`w-full font-bold py-3.5 rounded-xl flex justify-center items-center gap-2 transition-all ${status === "scanning" || !isValidCA
                     ? "bg-slate-700 text-slate-500 cursor-not-allowed"
                     : "bg-primary hover:bg-primary/90 text-neutral shadow-[0_0_15px_rgba(56,189,248,0.4)] hover:shadow-[0_0_20px_rgba(56,189,248,0.6)]"
-                }`}
+                  }`}
               >
                 <RefreshCwIcon className="w-5 h-5" />
                 Emergency Cashout (USDC)
@@ -248,43 +271,41 @@ const Handler = () => {
             </>
           ) : (
             <div className="flex flex-col items-center text-center pb-2">
-               <div className="bg-warning/10 p-4 rounded-full mb-4">
-                  <AlertTriangleIcon className="w-10 h-10 text-warning" />
-               </div>
-               <p className="text-slate-300 text-sm mb-6">
-                 We couldn't detect a valid Contract Address on this page. Please navigate to a specific token pair.
-               </p>
-               <button onClick={handleScan} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl flex justify-center items-center gap-2 border border-slate-600 transition-all">
-                 <RefreshCwIcon className="w-5 h-5" />
-                 Scan Current Page
-               </button>
+              <div className="bg-warning/10 p-4 rounded-full mb-4">
+                <AlertTriangleIcon className="w-10 h-10 text-warning" />
+              </div>
+              <p className="text-slate-300 text-sm mb-6">
+                We couldn't detect a valid Contract Address on this page. Please navigate to a specific token pair.
+              </p>
+              <button onClick={handleScan} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl flex justify-center items-center gap-2 border border-slate-600 transition-all">
+                <RefreshCwIcon className="w-5 h-5" />
+                Scan Current Page
+              </button>
             </div>
           )}
         </div>
       )}
 
       {/* Floating Badge */}
-      <button 
+      <button
         onClick={status === "done" ? () => setIsOpen(!isOpen) : handleScan}
         disabled={status === "scanning"}
-        className={`flex items-center gap-3 bg-neutral/90 backdrop-blur-md border px-5 py-2.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.5)] transition-all group ${
-          status === "scanning" ? "border-primary shadow-[0_0_15px_rgba(56,189,248,0.3)]" : 
-          status === "done" ? (isValidCA ? "border-success hover:border-success" : "border-warning hover:border-warning") : "border-slate-600 hover:border-slate-400"
-        }`}
+        className={`flex items-center gap-3 bg-neutral/90 backdrop-blur-md border px-5 py-2.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.5)] transition-all group ${status === "scanning" ? "border-primary shadow-[0_0_15px_rgba(56,189,248,0.3)]" :
+            status === "done" ? (isValidCA ? "border-success hover:border-success" : "border-warning hover:border-warning") : "border-slate-600 hover:border-slate-400"
+          }`}
       >
-        <div className={`p-1.5 rounded-full transition-colors ${
-          status === "scanning" ? "bg-primary/20 text-primary shadow-[0_0_10px_rgba(56,189,248,0.4)]" :
-          status === "done" ? (isValidCA ? "bg-success/20 text-success shadow-[0_0_10px_rgba(34,197,94,0.4)]" : "bg-warning/20 text-warning shadow-[0_0_10px_rgba(241,160,43,0.4)]") : "bg-slate-700 text-slate-400"
-        }`}>
-           {status === "scanning" ? <LoaderIcon className="w-4 h-4" /> : (status === "done" && !isValidCA ? <AlertTriangleIcon className="w-4 h-4" /> : <ShieldIcon className="w-4 h-4" />)}
+        <div className={`p-1.5 rounded-full transition-colors ${status === "scanning" ? "bg-primary/20 text-primary shadow-[0_0_10px_rgba(56,189,248,0.4)]" :
+            status === "done" ? (isValidCA ? "bg-success/20 text-success shadow-[0_0_10px_rgba(34,197,94,0.4)]" : "bg-warning/20 text-warning shadow-[0_0_10px_rgba(241,160,43,0.4)]") : "bg-slate-700 text-slate-400"
+          }`}>
+          {status === "scanning" ? <LoaderIcon className="w-4 h-4" /> : (status === "done" && !isValidCA ? <AlertTriangleIcon className="w-4 h-4" /> : <ShieldIcon className="w-4 h-4" />)}
         </div>
         <div className="flex flex-col items-start leading-tight">
-           <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-             {status === "scanning" ? "Analyzing CA..." : status === "done" ? (isValidCA ? "Security Score" : "Status") : "Rugsentry"}
-           </span>
-           <span className="text-sm text-white font-bold">
-             {status === "scanning" ? "Scanning..." : status === "done" ? (isValidCA ? <>{scanData.score}<span className="text-slate-500 text-xs font-normal">/100</span></> : "No Token") : "Scan Token"}
-           </span>
+          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+            {status === "scanning" ? "Analyzing CA..." : status === "done" ? (isValidCA ? "Security Score" : "Status") : "Rugsentry"}
+          </span>
+          <span className="text-sm text-white font-bold">
+            {status === "scanning" ? "Scanning..." : status === "done" ? (isValidCA ? <>{scanData.score}<span className="text-slate-500 text-xs font-normal">/100</span></> : "No Token") : "Scan Token"}
+          </span>
         </div>
       </button>
     </div>
