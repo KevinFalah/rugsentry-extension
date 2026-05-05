@@ -2,7 +2,7 @@ import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 import type { PlasmoCSConfig } from "plasmo"
 import { useEffect, useState } from "react"
-import { calculateSecurityScore, extractCAFromUrl, resolvePairAddress } from "~lib/scanner-utils"
+import { calculateSecurityScore, extractCAFromUrl, resolvePairAddress, shouldResetScanner } from "~lib/scanner-utils"
 export { getStyle } from "./style"
 
 const storage = new Storage({
@@ -87,17 +87,14 @@ const Handler = () => {
     const checkUrlChange = () => {
       const newUrl = window.location.href
       if (newUrl !== currentUrl) {
-        const oldCaFromUrl = extractCAFromUrl(currentUrl)
-        const newCaFromUrl = extractCAFromUrl(newUrl)
-        
-        // Hanya reset jika CA yang terdeteksi di URL benar-benar berubah
-        if (newCaFromUrl !== oldCaFromUrl) {
+        // Gunakan utility yang sudah teruji untuk menentukan apakah harus reset
+        if (shouldResetScanner(currentUrl, newUrl)) {
           setStatus("idle")
           setIsOpen(false)
           setScanData({ score: 100, mintable: false, freezable: false, ticker: "" })
         }
         
-        setCa(newCaFromUrl)
+        setCa(extractCAFromUrl(newUrl))
         setCurrentUrl(newUrl)
       }
     }

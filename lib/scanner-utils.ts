@@ -10,8 +10,11 @@ export const extractCAFromUrl = (url: string): string => {
     detectedCa = parts[parts.length - 1] || ""
   } else if (url.includes("birdeye.so") || url.includes("pump.fun")) {
     const parts = url.split("/")
-    detectedCa = parts[parts.length - 1]?.split("?")[0] || ""
+    detectedCa = parts[parts.length - 1] || ""
   }
+
+  // Bersihkan dari query params (?) atau fragment (#)
+  detectedCa = detectedCa.split("?")[0].split("#")[0]
   
   // Validasi panjang alamat Solana (sekitar 32-44 karakter)
   const isValid = detectedCa.length >= 32
@@ -62,4 +65,17 @@ export const calculateSecurityScore = (tokenData: any, fallbackCa: string) => {
     ticker,
     risk: score >= 80 ? "low" : score >= 50 ? "medium" : ("high" as const)
   }
+}
+
+/**
+ * Menentukan apakah scanner harus di-reset berdasarkan perubahan URL.
+ * Kita hanya reset jika CA yang terdeteksi di URL benar-benar berubah.
+ */
+export const shouldResetScanner = (oldUrl: string, newUrl: string): boolean => {
+  if (oldUrl === newUrl) return false
+  
+  const oldCa = extractCAFromUrl(oldUrl)
+  const newCa = extractCAFromUrl(newUrl)
+  
+  return oldCa !== newCa
 }
