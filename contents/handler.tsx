@@ -93,8 +93,9 @@ const Handler = () => {
         let res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
         let data = await res.json()
         
-        // Jika API GoPlus me-return 7012 (Not spl token), kemungkinan besar itu adalah Pair Address
-        if (data.code === 7012) {
+        // Jika API GoPlus me-return 7012 (Not spl token) atau 7013 (Address format error),
+        // kemungkinan besar itu adalah Pair Address atau URL-nya membuat CA menjadi lowercase.
+        if (data.code === 7012 || data.code === 7013) {
           actualCa = await resolvePairAddress(detectedCa)
           res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
           data = await res.json()
@@ -103,6 +104,7 @@ const Handler = () => {
         const tokenData = data.result ? Object.values(data.result)[0] as any : null
         const result = calculateSecurityScore(tokenData, actualCa)
 
+        setCa(actualCa) // Pastikan state ca selalu berisi Token CA (bukan Pair) untuk Jupiter
         setScanData({ 
           score: result.score, 
           mintable: result.mintable, 
@@ -217,7 +219,15 @@ const Handler = () => {
                 ))}
               </div>
 
-              <button className="w-full bg-primary hover:bg-primary/90 text-neutral font-bold py-3.5 rounded-xl flex justify-center items-center gap-2 shadow-[0_0_15px_rgba(56,189,248,0.4)] hover:shadow-[0_0_20px_rgba(56,189,248,0.6)] transition-all">
+              <button 
+                onClick={() => window.open(`https://jup.ag/swap?sell=${ca}&buy=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`, '_blank')}
+                disabled={status === "scanning" || !isValidCA}
+                className={`w-full font-bold py-3.5 rounded-xl flex justify-center items-center gap-2 transition-all ${
+                  status === "scanning" || !isValidCA
+                    ? "bg-slate-700 text-slate-500 cursor-not-allowed"
+                    : "bg-primary hover:bg-primary/90 text-neutral shadow-[0_0_15px_rgba(56,189,248,0.4)] hover:shadow-[0_0_20px_rgba(56,189,248,0.6)]"
+                }`}
+              >
                 <RefreshCwIcon className="w-5 h-5" />
                 Emergency Cashout (USDC)
               </button>
