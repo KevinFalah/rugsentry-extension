@@ -24,113 +24,120 @@ describe("Scanner Utils", () => {
     })
   })
 
-  describe("calculateSecurityScore", () => {
-    it("should return 100 for fully safe token (no fatal flags, LP burned, good distribution)", () => {
-      const mockData = {
-        mintable: { status: "0" },
-        freezable: { status: "0" },
-        holders: [
-          { account: "pool", percent: "0.3", is_locked: 0 },
-          { account: "user1", percent: "0.05", is_locked: 0 }
-        ],
-        creators: [],
-        metadata: { symbol: "SAFE" }
-      }
-      const result = calculateSecurityScore(mockData, "addr1234567890123456789012345678901")
+  describe("calculateSecurityScore (Dual-Engine)", () => {
+    const CA = "addr1234567890123456789012345678901"
+    const safeGoPlus = { mintable: { status: "0" }, freezable: { status: "0" }, metadata: { symbol: "SAFE" } }
+
+    it("should return 100 for fully safe token (GoPlus clean, no RugCheck risks)", () => {
+      const result = calculateSecurityScore(safeGoPlus, { risks: [], score_normalised: 100, lpLockedPct: 100 }, null, CA)
       expect(result.score).toBe(100)
       expect(result.risk).toBe("low")
-      expect(result.lpBurned).toBe(true)
+      expect(result.ticker).toBe("SAFE")
     })
 
-    it("should score 10 if mintable (fatal flag)", () => {
-      const mockData = {
-        mintable: { status: "1" },
-        freezable: { status: "0" },
-        holders: [{ account: "pool", percent: "0.3", is_locked: 0 }],
-        creators: []
-      }
-      const result = calculateSecurityScore(mockData, "addr1234567890123456789012345678901")
+    it("should score 10 if GoPlus detects mintable (fatal flag)", () => {
+      const goPlus = { mintable: { status: "1" }, freezable: { status: "0" } }
+      const result = calculateSecurityScore(goPlus, { risks: [], score_normalised: 80, lpLockedPct: 100 }, null, CA)
       expect(result.score).toBe(10)
-      expect(result.risk).toBe("high")
       expect(result.mintable).toBe(true)
+      expect(result.risk).toBe("high")
     })
 
-    it("should score 10 if freezable (fatal flag)", () => {
-      const mockData = {
-        mintable: { status: "0" },
-        freezable: { status: "1" },
-        holders: [{ account: "pool", percent: "0.3", is_locked: 0 }],
-        creators: []
-      }
-      const result = calculateSecurityScore(mockData, "addr1234567890123456789012345678901")
+    it("should score 10 if GoPlus detects freezable (fatal flag)", () => {
+      const goPlus = { mintable: { status: "0" }, freezable: { status: "1" } }
+      const result = calculateSecurityScore(goPlus, null, null, CA)
       expect(result.score).toBe(10)
-      expect(result.risk).toBe("high")
       expect(result.freezable).toBe(true)
     })
 
-    it("should score 10 if LP not burned (top holder >90% & not locked)", () => {
-      const mockData = {
-        mintable: { status: "0" },
-        freezable: { status: "0" },
-        holders: [{ account: "pool", percent: "0.95", is_locked: 0 }],
-        creators: []
+    it("should score 10 if RugCheck has danger-level risk", () => {
+      const rugCheck = {
+        risks: [{ name: "Honeypot detected", value: "", level: "danger" as const }],
+        score_normalised: 5,
+        lpLockedPct: 0
       }
-      const result = calculateSecurityScore(mockData, "addr1234567890123456789012345678901")
+      const result = calculateSecurityScore(safeGoPlus, rugCheck, null, CA)
       expect(result.score).toBe(10)
-      expect(result.lpBurned).toBe(false)
+      expect(result.risk).toBe("high")
     })
 
-    it("should deduct 20 if top 10 holders > 50% (warning flag)", () => {
-      const mockData = {
-        mintable: { status: "0" },
-        freezable: { status: "0" },
-        holders: [
-          { account: "a", percent: "0.15", is_locked: 0 },
-          { account: "b", percent: "0.12", is_locked: 0 },
-          { account: "c", percent: "0.10", is_locked: 0 },
-          { account: "d", percent: "0.08", is_locked: 0 },
-          { account: "e", percent: "0.06", is_locked: 0 }
+    it("should deduct points for RugCheck warn-level risks", () => {
+      const rugCheck = {
+        risks: [
+          { name: "Single holder ownership", value: "20.29%", level: "warn" as const },
+          { name: "High holder concentration", value: "", level: "warn" as const },
+          { name: "Low amount of LP Providers", value: "", level: "warn" as const }
         ],
-        creators: [],
-        metadata: { symbol: "RISKY" }
+        score_normalised: 36,
+        lpLockedPct: 100
       }
-      const result = calculateSecurityScore(mockData, "addr1234567890123456789012345678901")
-      expect(result.score).toBe(80)
-      expect(result.holderConcentrationRisk).toBe(true)
-    })
-
-    it("should deduct 15 if creator holds > 10%", () => {
-      const mockData = {
-        mintable: { status: "0" },
-        freezable: { status: "0" },
-        holders: [
-          { account: "creator123", percent: "0.15", is_locked: 0 },
-          { account: "user1", percent: "0.05", is_locked: 0 }
-        ],
-        creators: [{ address: "creator123" }],
-        metadata: { symbol: "DEV" }
-      }
-      const result = calculateSecurityScore(mockData, "addr1234567890123456789012345678901")
-      expect(result.score).toBe(85)
-      expect(result.creatorBalanceRisk).toBe(true)
-    })
-
-    it("should stack warning deductions (holder + creator)", () => {
-      const mockData = {
-        mintable: { status: "0" },
-        freezable: { status: "0" },
-        holders: [
-          { account: "creator123", percent: "0.30", is_locked: 0 },
-          { account: "b", percent: "0.12", is_locked: 0 },
-          { account: "c", percent: "0.10", is_locked: 0 }
-        ],
-        creators: [{ address: "creator123" }]
-      }
-      const result = calculateSecurityScore(mockData, "addr1234567890123456789012345678901")
-      expect(result.score).toBe(65)
-      expect(result.holderConcentrationRisk).toBe(true)
-      expect(result.creatorBalanceRisk).toBe(true)
+      // Penalties: 15 + 20 + 10 = 45. Score: 100 - 45 = 55
+      const result = calculateSecurityScore(safeGoPlus, rugCheck, null, CA)
+      expect(result.score).toBe(55)
       expect(result.risk).toBe("medium")
+      expect(result.risks).toHaveLength(3)
+    })
+
+    it("should deduct 15 for low liquidity from DexScreener", () => {
+      const dexData = { liquidityUsd: 2000, priceChange1h: 5, priceChange6h: 10 }
+      const result = calculateSecurityScore(safeGoPlus, { risks: [], score_normalised: 100, lpLockedPct: 100 }, dexData, CA)
+      expect(result.score).toBe(85)
+      expect(result.liquidityUsd).toBe(2000)
+    })
+
+    it("should deduct 10 for massive price dump from DexScreener", () => {
+      const dexData = { liquidityUsd: 50000, priceChange1h: -60, priceChange6h: -80 }
+      const result = calculateSecurityScore(safeGoPlus, { risks: [], score_normalised: 100, lpLockedPct: 100 }, dexData, CA)
+      expect(result.score).toBe(90)
+      expect(result.priceChange1h).toBe(-60)
+    })
+
+    it("should stack RugCheck warnings + DexScreener penalties", () => {
+      const rugCheck = {
+        risks: [{ name: "High holder concentration", value: "", level: "warn" as const }],
+        score_normalised: 60,
+        lpLockedPct: 100
+      }
+      const dexData = { liquidityUsd: 1000, priceChange1h: -55, priceChange6h: -70 }
+      // RugCheck: -20, DexScreener: -15 (low liq) + -10 (dump) = -45. Score: 100 - 45 = 55
+      const result = calculateSecurityScore(safeGoPlus, rugCheck, dexData, CA)
+      expect(result.score).toBe(55)
+      expect(result.risk).toBe("medium")
+    })
+
+    it("should NOT apply DexScreener penalties when fatal flag exists", () => {
+      const goPlus = { mintable: { status: "1" }, freezable: { status: "0" } }
+      const dexData = { liquidityUsd: 500, priceChange1h: -90, priceChange6h: -95 }
+      const result = calculateSecurityScore(goPlus, null, dexData, CA)
+      // Fatal flag → score = 10, DexScreener should NOT further reduce
+      expect(result.score).toBe(10)
+    })
+
+    it("should handle all APIs returning null gracefully (default 100) and mark rugCheckFailed as true", () => {
+      const result = calculateSecurityScore(null, null, null, CA)
+      expect(result.score).toBe(100)
+      expect(result.risk).toBe("low")
+      expect(result.risks).toEqual([])
+      expect(result.rugCheckFailed).toBe(true)
+    })
+
+    it("should clamp score to minimum 0", () => {
+      const rugCheck = {
+        risks: [
+          { name: "Single holder ownership", value: "50%", level: "warn" as const },
+          { name: "High holder concentration", value: "", level: "warn" as const },
+          { name: "Low amount of LP Providers", value: "", level: "warn" as const },
+          { name: "Copycat token", value: "", level: "warn" as const },
+          { name: "Low Liquidity", value: "", level: "warn" as const }
+        ],
+        score_normalised: 10,
+        lpLockedPct: 0
+      }
+      const dexData = { liquidityUsd: 100, priceChange1h: -80, priceChange6h: -90 }
+      // Penalties: 15+20+10+10+10 = 65 from RugCheck + 15+10 = 25 from Dex = 90. Score: 100-90 = 10
+      const result = calculateSecurityScore(safeGoPlus, rugCheck, dexData, CA)
+      expect(result.score).toBe(10)
+      expect(result.score).toBeGreaterThanOrEqual(0)
     })
   })
 

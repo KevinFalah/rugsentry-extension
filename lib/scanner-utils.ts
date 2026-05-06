@@ -1,4 +1,42 @@
 
+// =============================================
+// TYPES
+// =============================================
+
+export interface RugCheckRisk {
+  name: string
+  value: string
+  level: "warn" | "danger" | "info"
+}
+
+export interface RugCheckReport {
+  risks: RugCheckRisk[]
+  score_normalised: number
+  lpLockedPct: number
+}
+
+export interface DexMarketData {
+  liquidityUsd: number
+  priceChange1h: number
+  priceChange6h: number
+}
+
+export interface ScanResult {
+  score: number
+  mintable: boolean
+  freezable: boolean
+  risks: RugCheckRisk[]
+  rugCheckFailed: boolean
+  liquidityUsd: number | null
+  priceChange1h: number | null
+  ticker: string
+  risk: "low" | "medium" | "high"
+}
+
+// =============================================
+// URL EXTRACTION
+// =============================================
+
 /**
  * Mengambil Contract Address dari URL DexScreener, Birdeye, atau Pump.fun
  */
@@ -26,6 +64,10 @@ export const extractCAFromUrl = (url: string): string => {
   return isValid ? detectedCa : ""
 }
 
+// =============================================
+// API FETCHERS
+// =============================================
+
 /**
  * Mencoba me-resolve Pair Address menjadi Token Address menggunakan DexScreener API
  */
@@ -41,95 +83,157 @@ export const resolvePairAddress = async (address: string): Promise<string> => {
 }
 
 /**
- * Menghitung skor keamanan berdasarkan data dari GoPlus API.
- * Standar Web3 Professional Security Assessment.
+ * Mengambil laporan keamanan token dari RugCheck API.
+ * Endpoint ini GRATIS dan tidak memerlukan API key.
  */
-export const calculateSecurityScore = (tokenData: any, fallbackCa: string) => {
+export const fetchRugCheckReport = async (ca: string): Promise<RugCheckReport | null> => {
+  try {
+    const res = await fetch(`https://api.rugcheck.xyz/v1/tokens/${ca}/report/summary`)
+    if (!res.ok) return null
+    const data = await res.json()
+    return {
+      risks: (data.risks || []).map((r: any) => ({
+        name: r.name || "",
+        value: r.value || "",
+        level: r.level === "danger" ? "danger" : r.level === "warn" ? "warn" : "info"
+      })),
+      score_normalised: data.score_normalised ?? 100,
+      lpLockedPct: data.lpLockedPct ?? 0
+    }
+  } catch (e) {
+    console.error("RugCheck API failed:", e)
+    return null
+  }
+}
+
+/**
+ * Mengambil data pasar token dari DexScreener API.
+ * Menggunakan endpoint token search (bukan pairs).
+ */
+export const fetchDexScreenerMarket = async (ca: string): Promise<DexMarketData | null> => {
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    const pair = data.pairs?.[0]
+    if (!pair) return null
+    return {
+      liquidityUsd: pair.liquidity?.usd ?? 0,
+      priceChange1h: pair.priceChange?.h1 ?? 0,
+      priceChange6h: pair.priceChange?.h6 ?? 0
+    }
+  } catch (e) {
+    console.error("DexScreener market data failed:", e)
+    return null
+  }
+}
+
+// =============================================
+// SCORING ENGINE (Dual-Engine: GoPlus + RugCheck + DexScreener)
+// =============================================
+
+/**
+ * Mapping dari nama risiko RugCheck ke jumlah poin pengurangan.
+ * Ini memastikan setiap jenis peringatan memiliki bobot yang konsisten.
+ */
+const RUGCHECK_WARN_PENALTIES: Record<string, number> = {
+  "Single holder ownership": 15,
+  "High holder concentration": 20,
+  "Low amount of LP Providers": 10,
+  "Copycat token": 10,
+  "Low Liquidity": 10,
+}
+const DEFAULT_WARN_PENALTY = 5
+
+/**
+ * Menghitung skor keamanan berdasarkan data dari GoPlus + RugCheck + DexScreener.
+ * Standar Web3 Professional Security Assessment.
+ * 
+ * Scoring Flow:
+ * 1. Start with base score = 100
+ * 2. GoPlus Fatal Flags (mint/freeze) → score = 10
+ * 3. RugCheck danger-level risks → score = 10
+ * 4. RugCheck warn-level risks → deductions from score
+ * 5. DexScreener market data → additional deductions
+ * 6. Final score = max(0, min(100, score))
+ */
+export const calculateSecurityScore = (
+  goPlusData: any,
+  rugCheckData: RugCheckReport | null,
+  dexData: DexMarketData | null,
+  fallbackCa: string
+): ScanResult => {
   let score = 100
   let isMintable = false
   let isFreezable = false
-  let isLpBurned = true // Default true agar token baru/pump.fun yang belum di-index holders-nya tidak terkena false positive
-  let holderConcentrationRisk = false
-  let creatorBalanceRisk = false
   let ticker = fallbackCa.slice(0, 4).toUpperCase()
+  let hasFatalFlag = false
 
-  if (tokenData) {
-    // === FATAL RED FLAGS (Instant Rug Indicators) ===
-    // Jika salah satu dari flag ini aktif, skor langsung di-cap ke 10.
-    let hasFatalFlag = false
-
-    if (tokenData.mintable?.status === '1') {
+  // ── TIER 1: GoPlus Contract Fatal Flags ──
+  if (goPlusData) {
+    if (goPlusData.mintable?.status === '1') {
       isMintable = true
       hasFatalFlag = true
     }
-    if (tokenData.freezable?.status === '1') {
+    if (goPlusData.freezable?.status === '1') {
       isFreezable = true
       hasFatalFlag = true
     }
-
-    // Cek LP Burn: GoPlus Solana menyimpan top holder di array `holders`.
-    // Holder pertama yang memiliki > 90% LP biasanya adalah LP pool.
-    // Kita cek apakah LP tersebut terkunci (is_locked === 1).
-    const holders = tokenData.holders || []
-    const topHolder = holders[0]
-    if (topHolder) {
-      const topPercent = parseFloat(topHolder.percent || '0')
-      // Jika holder terbesar memiliki > 90% dan TIDAK terkunci, ini menandakan LP belum di-burn
-      if (topPercent > 0.9 && topHolder.is_locked === 0) {
-        isLpBurned = false
-      }
-    }
-    // LP tidak terkunci/dibakar = fatal
-    if (!isLpBurned) {
-      hasFatalFlag = true
-    }
-
-    if (hasFatalFlag) {
-      score = 10
-    }
-
-    // === WARNING FLAGS (hanya dijalankan jika lolos dari Fatal Red Flags) ===
-    if (!hasFatalFlag) {
-      // Holder Concentration: Hitung total persentase Top 10 Holders
-      const top10Rate = holders.reduce((sum: number, h: any) => {
-        return sum + parseFloat(h.percent || '0')
-      }, 0)
-      if (top10Rate > 0.5) {
-        score -= 20
-        holderConcentrationRisk = true
-      }
-
-      // Creator Balance: Cek apakah kreator masih memegang > 10% supply
-      const creators = tokenData.creators || []
-      if (creators.length > 0) {
-        const creatorAddress = creators[0]?.address || ''
-        const creatorHolder = holders.find((h: any) => h.account === creatorAddress)
-        if (creatorHolder) {
-          const creatorPercent = parseFloat(creatorHolder.percent || '0')
-          if (creatorPercent > 0.1) {
-            score -= 15
-            creatorBalanceRisk = true
-          }
-        }
-      }
-    }
-
-    if (tokenData.metadata?.symbol) {
-      ticker = tokenData.metadata.symbol
+    if (goPlusData.metadata?.symbol) {
+      ticker = goPlusData.metadata.symbol
     }
   }
+
+  // ── TIER 1: RugCheck Danger-Level Flags ──
+  const risks: RugCheckRisk[] = rugCheckData?.risks || []
+  const hasDangerRisk = risks.some(r => r.level === "danger")
+  if (hasDangerRisk) {
+    hasFatalFlag = true
+  }
+
+  if (hasFatalFlag) {
+    score = 10
+  }
+
+  // ── TIER 2: RugCheck Warning Deductions ──
+  if (!hasFatalFlag) {
+    for (const risk of risks) {
+      if (risk.level === "warn") {
+        const penalty = RUGCHECK_WARN_PENALTIES[risk.name] ?? DEFAULT_WARN_PENALTY
+        score -= penalty
+      }
+    }
+  }
+
+  // ── TIER 3: DexScreener Market Risk Deductions ──
+  if (!hasFatalFlag && dexData) {
+    if (dexData.liquidityUsd < 5000) {
+      score -= 15
+    }
+    if (dexData.priceChange1h < -50) {
+      score -= 10
+    }
+  }
+
+  // Clamp score to 0-100
+  score = Math.max(0, Math.min(100, score))
 
   return {
     score,
     mintable: isMintable,
     freezable: isFreezable,
-    lpBurned: isLpBurned,
-    holderConcentrationRisk,
-    creatorBalanceRisk,
+    risks,
+    rugCheckFailed: rugCheckData === null,
+    liquidityUsd: dexData?.liquidityUsd ?? null,
+    priceChange1h: dexData?.priceChange1h ?? null,
     ticker,
     risk: score >= 80 ? "low" : score >= 50 ? "medium" : ("high" as const)
   }
 }
+
+// =============================================
+// NAVIGATION GUARD
+// =============================================
 
 /**
  * Menentukan apakah scanner harus di-reset berdasarkan perubahan URL.
@@ -143,3 +247,4 @@ export const shouldResetScanner = (oldUrl: string, newUrl: string): boolean => {
   
   return oldCa !== newCa
 }
+

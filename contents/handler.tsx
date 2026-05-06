@@ -2,7 +2,8 @@ import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 import type { PlasmoCSConfig } from "plasmo"
 import { useEffect, useState } from "react"
-import { calculateSecurityScore, extractCAFromUrl, resolvePairAddress, shouldResetScanner } from "~lib/scanner-utils"
+import type { RugCheckRisk } from "~lib/scanner-utils"
+import { calculateSecurityScore, extractCAFromUrl, fetchDexScreenerMarket, fetchRugCheckReport, resolvePairAddress, shouldResetScanner } from "~lib/scanner-utils"
 export { getStyle } from "./style"
 
 const storage = new Storage({
@@ -72,7 +73,10 @@ const Handler = () => {
   const [ca, setCa] = useState("")
   const [currentUrl, setCurrentUrl] = useState(window.location.href)
   const [showBadge] = useStorage("show_badge", true)
-  const [scanData, setScanData] = useState({ score: 100, mintable: false, freezable: false, lpBurned: true, holderConcentrationRisk: false, creatorBalanceRisk: false, ticker: "" })
+  const [scanData, setScanData] = useState<{
+    score: number, mintable: boolean, freezable: boolean,
+    risks: RugCheckRisk[], rugCheckFailed: boolean, liquidityUsd: number | null, priceChange1h: number | null, ticker: string
+  }>({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, ticker: "" })
 
   // Function to extract CA from URL
   const extractCA = () => {
@@ -91,7 +95,7 @@ const Handler = () => {
         if (shouldResetScanner(currentUrl, newUrl)) {
           setStatus("idle")
           setIsOpen(false)
-          setScanData({ score: 100, mintable: false, freezable: false, lpBurned: true, holderConcentrationRisk: false, creatorBalanceRisk: false, ticker: "" })
+          setScanData({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, ticker: "" })
         }
         
         setCa(extractCAFromUrl(newUrl))
@@ -111,29 +115,40 @@ const Handler = () => {
 
     if (detectedCa) {
       try {
+        // Step 1: Resolve CA jika ternyata Pair Address
         let actualCa = detectedCa
         let res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
         let data = await res.json()
 
-        // Jika API GoPlus me-return 7012 (Not spl token) atau 7013 (Address format error),
-        // kemungkinan besar itu adalah Pair Address atau URL-nya membuat CA menjadi lowercase.
         if (data.code === 7012 || data.code === 7013) {
           actualCa = await resolvePairAddress(detectedCa)
           res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
           data = await res.json()
         }
 
-        const tokenData = data.result ? Object.values(data.result)[0] as any : null
-        const result = calculateSecurityScore(tokenData, actualCa)
+        const goPlusData = data.result ? Object.values(data.result)[0] as any : null
 
-        setCa(actualCa) // Pastikan state ca selalu berisi Token CA (bukan Pair) untuk Jupiter
+        // Step 2: Fetch RugCheck + DexScreener secara PARALEL
+        const [rugCheckResult, dexResult] = await Promise.allSettled([
+          fetchRugCheckReport(actualCa),
+          fetchDexScreenerMarket(actualCa)
+        ])
+
+        const rugCheckData = rugCheckResult.status === 'fulfilled' ? rugCheckResult.value : null
+        const dexData = dexResult.status === 'fulfilled' ? dexResult.value : null
+
+        // Step 3: Hitung skor gabungan dari 3 sumber
+        const result = calculateSecurityScore(goPlusData, rugCheckData, dexData, actualCa)
+
+        setCa(actualCa)
         setScanData({
           score: result.score,
           mintable: result.mintable,
           freezable: result.freezable,
-          lpBurned: result.lpBurned,
-          holderConcentrationRisk: result.holderConcentrationRisk,
-          creatorBalanceRisk: result.creatorBalanceRisk,
+          risks: result.risks,
+          rugCheckFailed: result.rugCheckFailed,
+          liquidityUsd: result.liquidityUsd,
+          priceChange1h: result.priceChange1h,
           ticker: result.ticker
         })
 
@@ -158,7 +173,7 @@ const Handler = () => {
       } catch (e) {
         console.error("Scan error:", e)
         // Fallback UI jika terjadi error fatal
-        setScanData({ score: 100, mintable: false, freezable: false, lpBurned: true, holderConcentrationRisk: false, creatorBalanceRisk: false, ticker: "" })
+        setScanData({ score: 100, mintable: false, freezable: false, risks: [], liquidityUsd: null, priceChange1h: null, ticker: "" })
       }
     }
 
@@ -238,38 +253,49 @@ const Handler = () => {
               </div>
 
               <div className="flex flex-col gap-2 mb-5">
-                {[
-                  {
-                    label: scanData.mintable ? "Mint Authority Enabled" : "Mint Authority Revoked",
-                    icon: scanData.mintable ? <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />,
-                    danger: scanData.mintable
-                  },
-                  {
-                    label: scanData.freezable ? "Freeze Authority Enabled" : "Not Freezable",
-                    icon: scanData.freezable ? <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />,
-                    danger: scanData.freezable
-                  },
-                  {
-                    label: scanData.lpBurned ? "Liquidity Burned / Locked" : "LP Not Burned",
-                    icon: scanData.lpBurned ? <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" /> : <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" />,
-                    danger: !scanData.lpBurned
-                  },
-                  {
-                    label: scanData.holderConcentrationRisk ? "Top 10 Holders > 50%" : "Holder Distribution OK",
-                    icon: scanData.holderConcentrationRisk ? <AlertTriangleIcon className="w-4 h-4 text-yellow-500 drop-shadow-[0_0_3px_rgba(234,179,8,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />,
-                    danger: scanData.holderConcentrationRisk
-                  },
-                  {
-                    label: scanData.creatorBalanceRisk ? "Creator Holds > 10%" : "Creator Balance OK",
-                    icon: scanData.creatorBalanceRisk ? <AlertTriangleIcon className="w-4 h-4 text-yellow-500 drop-shadow-[0_0_3px_rgba(234,179,8,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />,
-                    danger: scanData.creatorBalanceRisk
-                  }
-                ].map((item, idx) => (
-                  <div key={idx} className={`flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border transition-colors ${item.danger ? 'border-red-500/30 bg-red-500/10' : 'border-slate-700/40'}`}>
-                    <span className="text-xs text-slate-200 font-medium">{item.label}</span>
-                    {item.icon}
+                {/* Fixed: GoPlus Contract Security */}
+                <div className={`flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border transition-colors ${scanData.mintable ? 'border-red-500/30 bg-red-500/10' : 'border-slate-700/40'}`}>
+                  <span className="text-xs text-slate-200 font-medium">{scanData.mintable ? "Mint Authority Enabled" : "Mint Authority Revoked"}</span>
+                  {scanData.mintable ? <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />}
+                </div>
+                <div className={`flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border transition-colors ${scanData.freezable ? 'border-red-500/30 bg-red-500/10' : 'border-slate-700/40'}`}>
+                  <span className="text-xs text-slate-200 font-medium">{scanData.freezable ? "Freeze Authority Enabled" : "Not Freezable"}</span>
+                  {scanData.freezable ? <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />}
+                </div>
+
+                {/* Dynamic: RugCheck Risks */}
+                {scanData.rugCheckFailed ? (
+                  <div className="flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border border-slate-700/40">
+                    <span className="text-xs text-slate-400 font-medium italic">RugCheck: Data unavailable</span>
+                    <AlertTriangleIcon className="w-4 h-4 text-slate-500 drop-shadow-[0_0_3px_rgba(100,116,139,0.4)]" />
                   </div>
-                ))}
+                ) : scanData.risks.length > 0 ? (
+                  scanData.risks.map((risk, idx) => (
+                    <div key={`rc-${idx}`} className={`flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border transition-colors ${risk.level === 'danger' ? 'border-red-500/30 bg-red-500/10' : risk.level === 'warn' ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-slate-700/40'}`}>
+                      <span className="text-xs text-slate-200 font-medium">
+                        {risk.name}{risk.value ? ` (${risk.value})` : ''}
+                      </span>
+                      {risk.level === 'danger' ? <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" /> :
+                       risk.level === 'warn' ? <AlertTriangleIcon className="w-4 h-4 text-yellow-500 drop-shadow-[0_0_3px_rgba(234,179,8,0.4)]" /> :
+                       <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />}
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border border-slate-700/40">
+                    <span className="text-xs text-slate-200 font-medium">RugCheck: No issues found</span>
+                    <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />
+                  </div>
+                )}
+
+                {/* Bonus: DexScreener Liquidity */}
+                {scanData.liquidityUsd !== null && (
+                  <div className={`flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border transition-colors ${scanData.liquidityUsd < 5000 ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-slate-700/40'}`}>
+                    <span className="text-xs text-slate-200 font-medium">
+                      Liquidity: ${scanData.liquidityUsd < 1000 ? scanData.liquidityUsd.toFixed(0) : (scanData.liquidityUsd / 1000).toFixed(1) + 'K'}
+                    </span>
+                    {scanData.liquidityUsd < 5000 ? <AlertTriangleIcon className="w-4 h-4 text-yellow-500 drop-shadow-[0_0_3px_rgba(234,179,8,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />}
+                  </div>
+                )}
               </div>
 
               <button
