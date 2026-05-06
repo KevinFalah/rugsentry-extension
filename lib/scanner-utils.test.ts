@@ -110,6 +110,56 @@ describe("Scanner Utils", () => {
       expect(result.thinLiquidityRisk).toBe(false)
     })
 
+    it("should deduct 25 if top 10 clean holders exceed 40% concentration", () => {
+      const goPlusWithHolders = {
+        ...safeGoPlus,
+        holders: [
+          { account: "whale1", percent: "0.20" }, // 20%
+          { account: "whale2", percent: "0.15" }, // 15%
+          { account: "whale3", percent: "0.10" }, // 10% → total 45%
+          { account: "user4",  percent: "0.05" },
+        ]
+      }
+      const result = calculateSecurityScore(goPlusWithHolders, { risks: [], score_normalised: 100, lpLockedPct: 100 }, null, CA)
+
+      expect(result.score).toBe(75) // 100 - 25
+      expect(result.highConcentrationRisk).toBe(true)
+    })
+
+    it("should NOT deduct if top 10 concentration is below or equal to 40%", () => {
+      const goPlusWithHolders = {
+        ...safeGoPlus,
+        holders: [
+          { account: "whale1", percent: "0.15" },
+          { account: "whale2", percent: "0.10" },
+          { account: "whale3", percent: "0.10" }, // total 35%
+        ]
+      }
+      const result = calculateSecurityScore(goPlusWithHolders, { risks: [], score_normalised: 100, lpLockedPct: 100 }, null, CA)
+
+      expect(result.score).toBe(100)
+      expect(result.highConcentrationRisk).toBe(false)
+    })
+
+    it("should exclude known LP/Burn addresses from concentration calculation", () => {
+      const raydiumLpAddress = "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1"
+      const burnAddress = "1nc1nerator11111111111111111111111111111111"
+      const goPlusWithHolders = {
+        ...safeGoPlus,
+        holders: [
+          { account: raydiumLpAddress, percent: "0.60" }, // 60% LP — harus diabaikan
+          { account: burnAddress,      percent: "0.15" }, // 15% burn — harus diabaikan
+          { account: "whale1",         percent: "0.20" }, // 20% holder biasa
+          { account: "user1",          percent: "0.05" }, // 5% holder biasa
+        ]
+      }
+      // Setelah LP & burn diabaikan, konsentrasi bersih = 20% + 5% = 25% (di bawah 40%)
+      const result = calculateSecurityScore(goPlusWithHolders, { risks: [], score_normalised: 100, lpLockedPct: 100 }, null, CA)
+
+      expect(result.score).toBe(100)
+      expect(result.highConcentrationRisk).toBe(false)
+    })
+
     it("should stack RugCheck warnings + DexScreener penalties", () => {
       const rugCheck = {
         risks: [{ name: "High holder concentration", value: "", level: "warn" as const }],

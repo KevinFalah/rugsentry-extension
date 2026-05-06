@@ -31,6 +31,7 @@ export interface ScanResult {
   liquidityUsd: number | null
   priceChange1h: number | null
   thinLiquidityRisk: boolean
+  highConcentrationRisk: boolean
   ticker: string
   risk: "low" | "medium" | "high"
 }
@@ -149,6 +150,18 @@ const RUGCHECK_WARN_PENALTIES: Record<string, number> = {
 const DEFAULT_WARN_PENALTY = 5
 
 /**
+ * Daftar alamat LP/Burn publik yang diketahui untuk dikecualikan dari perhitungan konsentrasi holder.
+ * Sumber: Raydium, Pump.fun, Solana native burn/null address.
+ */
+const KNOWN_LP_AND_BURN_ADDRESSES = new Set([
+  "11111111111111111111111111111111",           // Solana null/system address
+  "1nc1nerator11111111111111111111111111111111", // Solana burn address
+  "So11111111111111111111111111111111111111112", // Wrapped SOL
+  "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1", // Raydium v4 liquidity pool
+  "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8", // Raydium AMM Program
+])
+
+/**
  * Menghitung skor keamanan berdasarkan data dari GoPlus + RugCheck + DexScreener.
  * Standar Web3 Professional Security Assessment.
  * 
@@ -170,6 +183,7 @@ export const calculateSecurityScore = (
   let isMintable = false
   let isFreezable = false
   let thinLiquidityRisk = false
+  let highConcentrationRisk = false
   let ticker = fallbackCa.slice(0, 4).toUpperCase()
   let hasFatalFlag = false
 
@@ -214,6 +228,27 @@ export const calculateSecurityScore = (
     }
   }
 
+  // ── TIER 2.5: GoPlus Sybil/Cluster Concentration Check ──
+  // Cek top 10 holders, kecualikan alamat LP/Burn yang diketahui
+  // Jika total konsentrasi bersih > 40%, kurangi 25 poin
+  if (!hasFatalFlag && goPlusData) {
+    const holders: any[] = goPlusData.holders || []
+    const top10 = holders.slice(0, 10)
+    const cleanConcentration = top10.reduce((sum: number, h: any) => {
+      const addr: string = (h.account || h.address || "").toLowerCase()
+      const isExcluded = KNOWN_LP_AND_BURN_ADDRESSES.has(h.account || h.address || "")
+        || addr.startsWith("raydium") // Raydium naming convention
+        || h.tag === "LiquidityVault"  // GoPlus tagging
+      if (isExcluded) return sum
+      return sum + parseFloat(h.percent || '0')
+    }, 0)
+
+    if (cleanConcentration > 0.40) {
+      score -= 25
+      highConcentrationRisk = true
+    }
+  }
+
   // ── TIER 3: DexScreener Market Risk Deductions ──
   if (!hasFatalFlag && dexData) {
     if (dexData.liquidityUsd < 5000) {
@@ -245,6 +280,7 @@ export const calculateSecurityScore = (
     liquidityUsd: dexData?.liquidityUsd ?? null,
     priceChange1h: dexData?.priceChange1h ?? null,
     thinLiquidityRisk,
+    highConcentrationRisk,
     ticker,
     risk: score >= 80 ? "low" : score >= 50 ? "medium" : ("high" as const)
   }
