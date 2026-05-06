@@ -201,7 +201,6 @@ export const calculateSecurityScore = (
       if (risk.level === "warn") {
         let penalty = RUGCHECK_WARN_PENALTIES[risk.name] ?? DEFAULT_WARN_PENALTY
 
-        // Pengecualian untuk token Pump.fun: wajar jika jumlah LP providers sedikit (biasanya 1 pool Raydium)
         if (risk.name === "Low amount of LP Providers" && fallbackCa.endsWith("pump")) {
           penalty = 0
         }
