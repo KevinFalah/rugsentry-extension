@@ -86,10 +86,28 @@ describe("Scanner Utils", () => {
     })
 
     it("should deduct 10 for massive price dump from DexScreener", () => {
-      const dexData = { liquidityUsd: 50000, priceChange1h: -60, priceChange6h: -80 }
+      const dexData = { liquidityUsd: 50000, marketCap: 1000000, priceChange1h: -60, priceChange6h: -80 }
       const result = calculateSecurityScore(safeGoPlus, { risks: [], score_normalised: 100, lpLockedPct: 100 }, dexData, CA)
       expect(result.score).toBe(90)
       expect(result.priceChange1h).toBe(-60)
+    })
+
+    it("should deduct 30 for Liquidity Trap (Liquidity/MarketCap ratio < 2%)", () => {
+      // Market Cap 1 Juta, Liquidity cuma 10 ribu (rasio 1%)
+      const dexData = { liquidityUsd: 10000, marketCap: 1000000, priceChange1h: 0, priceChange6h: 0 }
+      const result = calculateSecurityScore(safeGoPlus, { risks: [], score_normalised: 100, lpLockedPct: 100 }, dexData, CA)
+      
+      expect(result.score).toBe(70) // 100 - 30
+      expect(result.thinLiquidityRisk).toBe(true)
+    })
+
+    it("should NOT deduct 30 if Liquidity/MarketCap ratio is healthy (>= 2%)", () => {
+      // Market Cap 1 Juta, Liquidity 50 ribu (rasio 5%)
+      const dexData = { liquidityUsd: 50000, marketCap: 1000000, priceChange1h: 0, priceChange6h: 0 }
+      const result = calculateSecurityScore(safeGoPlus, { risks: [], score_normalised: 100, lpLockedPct: 100 }, dexData, CA)
+      
+      expect(result.score).toBe(100)
+      expect(result.thinLiquidityRisk).toBe(false)
     })
 
     it("should stack RugCheck warnings + DexScreener penalties", () => {

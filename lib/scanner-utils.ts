@@ -17,6 +17,7 @@ export interface RugCheckReport {
 
 export interface DexMarketData {
   liquidityUsd: number
+  marketCap: number
   priceChange1h: number
   priceChange6h: number
 }
@@ -29,6 +30,7 @@ export interface ScanResult {
   rugCheckFailed: boolean
   liquidityUsd: number | null
   priceChange1h: number | null
+  thinLiquidityRisk: boolean
   ticker: string
   risk: "low" | "medium" | "high"
 }
@@ -119,6 +121,7 @@ export const fetchDexScreenerMarket = async (ca: string): Promise<DexMarketData 
     if (!pair) return null
     return {
       liquidityUsd: pair.liquidity?.usd ?? 0,
+      marketCap: pair.marketCap ?? pair.fdv ?? 0, // fdv adalah fallback jika marketCap kosong
       priceChange1h: pair.priceChange?.h1 ?? 0,
       priceChange6h: pair.priceChange?.h6 ?? 0
     }
@@ -166,6 +169,7 @@ export const calculateSecurityScore = (
   let score = 100
   let isMintable = false
   let isFreezable = false
+  let thinLiquidityRisk = false
   let ticker = fallbackCa.slice(0, 4).toUpperCase()
   let hasFatalFlag = false
 
@@ -218,6 +222,15 @@ export const calculateSecurityScore = (
     if (dexData.priceChange1h < -50) {
       score -= 10
     }
+    
+    // Liquidity Trap Penalty: Liquidity / MarketCap ratio < 2%
+    if (dexData.marketCap > 0) {
+      const ratio = dexData.liquidityUsd / dexData.marketCap
+      if (ratio < 0.02) {
+        score -= 30
+        thinLiquidityRisk = true
+      }
+    }
   }
 
   // Clamp score to 0-100
@@ -231,6 +244,7 @@ export const calculateSecurityScore = (
     rugCheckFailed: rugCheckData === null,
     liquidityUsd: dexData?.liquidityUsd ?? null,
     priceChange1h: dexData?.priceChange1h ?? null,
+    thinLiquidityRisk,
     ticker,
     risk: score >= 80 ? "low" : score >= 50 ? "medium" : ("high" as const)
   }

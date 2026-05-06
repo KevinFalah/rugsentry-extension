@@ -75,8 +75,9 @@ const Handler = () => {
   const [showBadge] = useStorage("show_badge", true)
   const [scanData, setScanData] = useState<{
     score: number, mintable: boolean, freezable: boolean,
-    risks: RugCheckRisk[], rugCheckFailed: boolean, liquidityUsd: number | null, priceChange1h: number | null, ticker: string
-  }>({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, ticker: "" })
+    risks: RugCheckRisk[], rugCheckFailed: boolean, liquidityUsd: number | null, priceChange1h: number | null, 
+    thinLiquidityRisk: boolean, ticker: string
+  }>({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, ticker: "" })
 
   // Function to extract CA from URL
   const extractCA = () => {
@@ -95,7 +96,7 @@ const Handler = () => {
         if (shouldResetScanner(currentUrl, newUrl)) {
           setStatus("idle")
           setIsOpen(false)
-          setScanData({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, ticker: "" })
+          setScanData({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, ticker: "" })
         }
         
         setCa(extractCAFromUrl(newUrl))
@@ -149,6 +150,7 @@ const Handler = () => {
           rugCheckFailed: result.rugCheckFailed,
           liquidityUsd: result.liquidityUsd,
           priceChange1h: result.priceChange1h,
+          thinLiquidityRisk: result.thinLiquidityRisk,
           ticker: result.ticker
         })
 
@@ -288,7 +290,13 @@ const Handler = () => {
                 )}
 
                 {/* Bonus: DexScreener Liquidity */}
-                {scanData.liquidityUsd !== null && (
+                {scanData.thinLiquidityRisk && (
+                  <div className="flex justify-between items-center bg-red-500/10 rounded-lg px-3 py-2.5 border border-red-500/30 transition-colors">
+                    <span className="text-xs text-slate-200 font-medium">Extremely Thin Liquidity (Ratio &lt; 2%)</span>
+                    <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" />
+                  </div>
+                )}
+                {scanData.liquidityUsd !== null && !scanData.thinLiquidityRisk && (
                   <div className={`flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border transition-colors ${scanData.liquidityUsd < 5000 ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-slate-700/40'}`}>
                     <span className="text-xs text-slate-200 font-medium">
                       Liquidity: ${scanData.liquidityUsd < 1000 ? scanData.liquidityUsd.toFixed(0) : (scanData.liquidityUsd / 1000).toFixed(1) + 'K'}
