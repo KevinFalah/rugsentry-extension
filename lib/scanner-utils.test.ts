@@ -8,6 +8,11 @@ describe("Scanner Utils", () => {
       expect(extractCAFromUrl(url)).toBe("3G3sHFsdQwHPAnJpN6Sy5oFEKfviGAjCc7NVPHgspump")
     })
 
+    it("should return empty string for non-Solana networks (like TON)", () => {
+      const url = "https://dexscreener.com/ton/eqd9sq4tfasxs61k2lv6gdhiysf4s0oxpx5ujsihqztxaflg"
+      expect(extractCAFromUrl(url)).toBe("")
+    })
+
     it("should extract CA from Birdeye URL", () => {
       const url = "https://birdeye.so/token/So11111111111111111111111111111111111111112?chain=solana"
       expect(extractCAFromUrl(url)).toBe("So11111111111111111111111111111111111111112")

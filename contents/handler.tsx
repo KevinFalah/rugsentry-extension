@@ -289,8 +289,11 @@ const Handler = () => {
               <div className="bg-warning/10 p-4 rounded-full mb-4">
                 <AlertTriangleIcon className="w-10 h-10 text-warning" />
               </div>
-              <p className="text-slate-300 text-sm mb-6">
-                We couldn't detect a valid Contract Address on this page. Please navigate to a specific token pair.
+              <p className="text-slate-300 text-sm mb-2">
+                We couldn't detect a valid token address on this page.
+              </p>
+              <p className="text-slate-400 text-xs mb-6 px-2">
+                Note: Rugsentry currently only supports the <strong className="text-[#14F195] font-semibold">Solana Network</strong>. Please navigate to a Solana token pair.
               </p>
               <button onClick={handleScan} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl flex justify-center items-center gap-2 border border-slate-600 transition-all">
                 <RefreshCwIcon className="w-5 h-5" />

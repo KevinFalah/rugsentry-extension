@@ -6,9 +6,14 @@ export const extractCAFromUrl = (url: string): string => {
   let detectedCa = ""
   
   if (url.includes("dexscreener.com")) {
+    if (!url.includes("/solana/")) return "" // Hanya proses jaringan Solana
     const parts = url.split("/")
     detectedCa = parts[parts.length - 1] || ""
-  } else if (url.includes("birdeye.so") || url.includes("pump.fun")) {
+  } else if (url.includes("birdeye.so")) {
+    if (!url.includes("chain=solana") && !url.includes("/solana/")) return "" // Hanya proses jaringan Solana
+    const parts = url.split("/")
+    detectedCa = parts[parts.length - 1] || ""
+  } else if (url.includes("pump.fun")) {
     const parts = url.split("/")
     detectedCa = parts[parts.length - 1] || ""
   }
@@ -43,7 +48,7 @@ export const calculateSecurityScore = (tokenData: any, fallbackCa: string) => {
   let score = 100
   let isMintable = false
   let isFreezable = false
-  let isLpBurned = false
+  let isLpBurned = true // Default true agar token baru/pump.fun yang belum di-index holders-nya tidak terkena false positive
   let holderConcentrationRisk = false
   let creatorBalanceRisk = false
   let ticker = fallbackCa.slice(0, 4).toUpperCase()
@@ -65,7 +70,6 @@ export const calculateSecurityScore = (tokenData: any, fallbackCa: string) => {
     // Cek LP Burn: GoPlus Solana menyimpan top holder di array `holders`.
     // Holder pertama yang memiliki > 90% LP biasanya adalah LP pool.
     // Kita cek apakah LP tersebut terkunci (is_locked === 1).
-    // Jika holder_count sangat rendah dan tidak ada yang terkunci, LP belum di-burn/lock.
     const holders = tokenData.holders || []
     const topHolder = holders[0]
     if (topHolder) {
@@ -73,11 +77,6 @@ export const calculateSecurityScore = (tokenData: any, fallbackCa: string) => {
       // Jika holder terbesar memiliki > 90% dan TIDAK terkunci, ini menandakan LP belum di-burn
       if (topPercent > 0.9 && topHolder.is_locked === 0) {
         isLpBurned = false
-      } else if (topPercent > 0.9 && topHolder.is_locked === 1) {
-        isLpBurned = true
-      } else {
-        // Jika tidak ada holder dominan, kita anggap LP tersebar (aman)
-        isLpBurned = true
       }
     }
     // LP tidak terkunci/dibakar = fatal
