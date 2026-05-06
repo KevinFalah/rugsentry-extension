@@ -20,35 +20,112 @@ describe("Scanner Utils", () => {
   })
 
   describe("calculateSecurityScore", () => {
-    it("should return 100 for safe token", () => {
+    it("should return 100 for fully safe token (no fatal flags, LP burned, good distribution)", () => {
       const mockData = {
         mintable: { status: "0" },
         freezable: { status: "0" },
+        holders: [
+          { account: "pool", percent: "0.3", is_locked: 0 },
+          { account: "user1", percent: "0.05", is_locked: 0 }
+        ],
+        creators: [],
         metadata: { symbol: "SAFE" }
       }
-      const result = calculateSecurityScore(mockData, "addr123")
+      const result = calculateSecurityScore(mockData, "addr1234567890123456789012345678901")
       expect(result.score).toBe(100)
       expect(result.risk).toBe("low")
+      expect(result.lpBurned).toBe(true)
     })
 
-    it("should deduct 40 points if mintable", () => {
+    it("should score 10 if mintable (fatal flag)", () => {
       const mockData = {
         mintable: { status: "1" },
-        freezable: { status: "0" }
+        freezable: { status: "0" },
+        holders: [{ account: "pool", percent: "0.3", is_locked: 0 }],
+        creators: []
       }
-      const result = calculateSecurityScore(mockData, "addr123")
-      expect(result.score).toBe(60)
-      expect(result.risk).toBe("medium")
-    })
-
-    it("should deduct 80 points if both mintable and freezable", () => {
-      const mockData = {
-        mintable: { status: "1" },
-        freezable: { status: "1" }
-      }
-      const result = calculateSecurityScore(mockData, "addr123")
-      expect(result.score).toBe(20)
+      const result = calculateSecurityScore(mockData, "addr1234567890123456789012345678901")
+      expect(result.score).toBe(10)
       expect(result.risk).toBe("high")
+      expect(result.mintable).toBe(true)
+    })
+
+    it("should score 10 if freezable (fatal flag)", () => {
+      const mockData = {
+        mintable: { status: "0" },
+        freezable: { status: "1" },
+        holders: [{ account: "pool", percent: "0.3", is_locked: 0 }],
+        creators: []
+      }
+      const result = calculateSecurityScore(mockData, "addr1234567890123456789012345678901")
+      expect(result.score).toBe(10)
+      expect(result.risk).toBe("high")
+      expect(result.freezable).toBe(true)
+    })
+
+    it("should score 10 if LP not burned (top holder >90% & not locked)", () => {
+      const mockData = {
+        mintable: { status: "0" },
+        freezable: { status: "0" },
+        holders: [{ account: "pool", percent: "0.95", is_locked: 0 }],
+        creators: []
+      }
+      const result = calculateSecurityScore(mockData, "addr1234567890123456789012345678901")
+      expect(result.score).toBe(10)
+      expect(result.lpBurned).toBe(false)
+    })
+
+    it("should deduct 20 if top 10 holders > 50% (warning flag)", () => {
+      const mockData = {
+        mintable: { status: "0" },
+        freezable: { status: "0" },
+        holders: [
+          { account: "a", percent: "0.15", is_locked: 0 },
+          { account: "b", percent: "0.12", is_locked: 0 },
+          { account: "c", percent: "0.10", is_locked: 0 },
+          { account: "d", percent: "0.08", is_locked: 0 },
+          { account: "e", percent: "0.06", is_locked: 0 }
+        ],
+        creators: [],
+        metadata: { symbol: "RISKY" }
+      }
+      const result = calculateSecurityScore(mockData, "addr1234567890123456789012345678901")
+      expect(result.score).toBe(80)
+      expect(result.holderConcentrationRisk).toBe(true)
+    })
+
+    it("should deduct 15 if creator holds > 10%", () => {
+      const mockData = {
+        mintable: { status: "0" },
+        freezable: { status: "0" },
+        holders: [
+          { account: "creator123", percent: "0.15", is_locked: 0 },
+          { account: "user1", percent: "0.05", is_locked: 0 }
+        ],
+        creators: [{ address: "creator123" }],
+        metadata: { symbol: "DEV" }
+      }
+      const result = calculateSecurityScore(mockData, "addr1234567890123456789012345678901")
+      expect(result.score).toBe(85)
+      expect(result.creatorBalanceRisk).toBe(true)
+    })
+
+    it("should stack warning deductions (holder + creator)", () => {
+      const mockData = {
+        mintable: { status: "0" },
+        freezable: { status: "0" },
+        holders: [
+          { account: "creator123", percent: "0.30", is_locked: 0 },
+          { account: "b", percent: "0.12", is_locked: 0 },
+          { account: "c", percent: "0.10", is_locked: 0 }
+        ],
+        creators: [{ address: "creator123" }]
+      }
+      const result = calculateSecurityScore(mockData, "addr1234567890123456789012345678901")
+      expect(result.score).toBe(65)
+      expect(result.holderConcentrationRisk).toBe(true)
+      expect(result.creatorBalanceRisk).toBe(true)
+      expect(result.risk).toBe("medium")
     })
   })
 

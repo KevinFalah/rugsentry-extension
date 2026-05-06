@@ -72,7 +72,7 @@ const Handler = () => {
   const [ca, setCa] = useState("")
   const [currentUrl, setCurrentUrl] = useState(window.location.href)
   const [showBadge] = useStorage("show_badge", true)
-  const [scanData, setScanData] = useState({ score: 100, mintable: false, freezable: false, ticker: "" })
+  const [scanData, setScanData] = useState({ score: 100, mintable: false, freezable: false, lpBurned: true, holderConcentrationRisk: false, creatorBalanceRisk: false, ticker: "" })
 
   // Function to extract CA from URL
   const extractCA = () => {
@@ -91,7 +91,7 @@ const Handler = () => {
         if (shouldResetScanner(currentUrl, newUrl)) {
           setStatus("idle")
           setIsOpen(false)
-          setScanData({ score: 100, mintable: false, freezable: false, ticker: "" })
+          setScanData({ score: 100, mintable: false, freezable: false, lpBurned: true, holderConcentrationRisk: false, creatorBalanceRisk: false, ticker: "" })
         }
         
         setCa(extractCAFromUrl(newUrl))
@@ -131,6 +131,9 @@ const Handler = () => {
           score: result.score,
           mintable: result.mintable,
           freezable: result.freezable,
+          lpBurned: result.lpBurned,
+          holderConcentrationRisk: result.holderConcentrationRisk,
+          creatorBalanceRisk: result.creatorBalanceRisk,
           ticker: result.ticker
         })
 
@@ -155,7 +158,7 @@ const Handler = () => {
       } catch (e) {
         console.error("Scan error:", e)
         // Fallback UI jika terjadi error fatal
-        setScanData({ score: 100, mintable: false, freezable: false })
+        setScanData({ score: 100, mintable: false, freezable: false, lpBurned: true, holderConcentrationRisk: false, creatorBalanceRisk: false, ticker: "" })
       }
     }
 
@@ -213,8 +216,8 @@ const Handler = () => {
 
           {isValidCA ? (
             <>
-              <div className="flex justify-center mb-8 relative">
-                <svg width="180" height="100" viewBox="0 0 160 90" className="overflow-visible">
+              <div className="flex justify-center mb-5 relative">
+                <svg width="160" height="90" viewBox="0 0 160 90" className="overflow-visible">
                   <path d="M 10 80 A 70 70 0 0 1 150 80" fill="none" stroke="#1e293b" strokeWidth="12" strokeLinecap="round" />
                   <path
                     d="M 10 80 A 70 70 0 0 1 150 80"
@@ -225,30 +228,45 @@ const Handler = () => {
                     strokeDasharray="220"
                     strokeDashoffset={220 - (220 * scanData.score / 100)}
                     className="transition-all duration-1000 ease-out"
-                    style={{ filter: `drop-shadow(0 0 8px ${scanData.score >= 80 ? 'rgba(34,197,94,0.6)' : scanData.score >= 50 ? 'rgba(241,160,43,0.6)' : 'rgba(239,68,68,0.6)'})` }}
+                    style={{ filter: `drop-shadow(0 0 6px ${scanData.score >= 80 ? 'rgba(34,197,94,0.5)' : scanData.score >= 50 ? 'rgba(241,160,43,0.5)' : 'rgba(239,68,68,0.5)'})` }}
                   />
                 </svg>
                 <div className="absolute bottom-1 left-0 right-0 text-center flex flex-col items-center">
-                  <span className="text-4xl font-bold text-white leading-none">{scanData.score}</span>
-                  <span className="text-[10px] text-slate-400 font-bold tracking-widest mt-1">SAFETY SCORE</span>
+                  <span className="text-3xl font-bold text-white leading-none">{scanData.score}</span>
+                  <span className="text-[9px] text-slate-400 font-bold tracking-widest mt-1">SAFETY SCORE</span>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2.5 mb-6">
+              <div className="flex flex-col gap-2 mb-5">
                 {[
                   {
-                    label: scanData.mintable ? "Mint Authority Enabled" : "Mint Authority Disabled",
-                    icon: scanData.mintable ? <AlertTriangleIcon className="w-5 h-5 text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-5 h-5 text-success drop-shadow-[0_0_5px_rgba(34,197,94,0.4)]" />,
+                    label: scanData.mintable ? "Mint Authority Enabled" : "Mint Authority Revoked",
+                    icon: scanData.mintable ? <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />,
                     danger: scanData.mintable
                   },
                   {
-                    label: scanData.freezable ? "Freezable Enabled" : "Not Freezable",
-                    icon: scanData.freezable ? <AlertTriangleIcon className="w-5 h-5 text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-5 h-5 text-success drop-shadow-[0_0_5px_rgba(34,197,94,0.4)]" />,
+                    label: scanData.freezable ? "Freeze Authority Enabled" : "Not Freezable",
+                    icon: scanData.freezable ? <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />,
                     danger: scanData.freezable
+                  },
+                  {
+                    label: scanData.lpBurned ? "Liquidity Burned / Locked" : "LP Not Burned",
+                    icon: scanData.lpBurned ? <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" /> : <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" />,
+                    danger: !scanData.lpBurned
+                  },
+                  {
+                    label: scanData.holderConcentrationRisk ? "Top 10 Holders > 50%" : "Holder Distribution OK",
+                    icon: scanData.holderConcentrationRisk ? <AlertTriangleIcon className="w-4 h-4 text-yellow-500 drop-shadow-[0_0_3px_rgba(234,179,8,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />,
+                    danger: scanData.holderConcentrationRisk
+                  },
+                  {
+                    label: scanData.creatorBalanceRisk ? "Creator Holds > 10%" : "Creator Balance OK",
+                    icon: scanData.creatorBalanceRisk ? <AlertTriangleIcon className="w-4 h-4 text-yellow-500 drop-shadow-[0_0_3px_rgba(234,179,8,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />,
+                    danger: scanData.creatorBalanceRisk
                   }
                 ].map((item, idx) => (
-                  <div key={idx} className={`flex justify-between items-center bg-slate-800/50 rounded-xl p-3.5 border transition-colors ${item.danger ? 'border-red-500/30 bg-red-500/10' : 'border-slate-700/30'}`}>
-                    <span className="text-sm text-slate-200 font-medium">{item.label}</span>
+                  <div key={idx} className={`flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border transition-colors ${item.danger ? 'border-red-500/30 bg-red-500/10' : 'border-slate-700/40'}`}>
+                    <span className="text-xs text-slate-200 font-medium">{item.label}</span>
                     {item.icon}
                   </div>
                 ))}
@@ -257,7 +275,7 @@ const Handler = () => {
               <button
                 onClick={() => window.open(`https://jup.ag/swap?sell=${ca}&buy=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`, '_blank')}
                 disabled={status === "scanning" || !isValidCA}
-                className={`w-full font-bold py-3.5 rounded-xl flex justify-center items-center gap-2 transition-all ${status === "scanning" || !isValidCA
+                className={`w-full font-bold py-3 rounded-xl flex justify-center items-center gap-2 transition-all ${status === "scanning" || !isValidCA
                     ? "bg-slate-700 text-slate-500 cursor-not-allowed"
                     : "bg-primary hover:bg-primary/90 text-neutral shadow-[0_0_15px_rgba(56,189,248,0.4)] hover:shadow-[0_0_20px_rgba(56,189,248,0.6)]"
                   }`}

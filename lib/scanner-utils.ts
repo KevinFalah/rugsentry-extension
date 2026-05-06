@@ -36,23 +36,85 @@ export const resolvePairAddress = async (address: string): Promise<string> => {
 }
 
 /**
- * Menghitung skor keamanan berdasarkan data dari GoPlus API
+ * Menghitung skor keamanan berdasarkan data dari GoPlus API.
+ * Standar Web3 Professional Security Assessment.
  */
 export const calculateSecurityScore = (tokenData: any, fallbackCa: string) => {
   let score = 100
   let isMintable = false
   let isFreezable = false
+  let isLpBurned = false
+  let holderConcentrationRisk = false
+  let creatorBalanceRisk = false
   let ticker = fallbackCa.slice(0, 4).toUpperCase()
 
   if (tokenData) {
+    // === FATAL RED FLAGS (Instant Rug Indicators) ===
+    // Jika salah satu dari flag ini aktif, skor langsung di-cap ke 10.
+    let hasFatalFlag = false
+
     if (tokenData.mintable?.status === '1') {
-      score -= 40
       isMintable = true
+      hasFatalFlag = true
     }
     if (tokenData.freezable?.status === '1') {
-      score -= 40
       isFreezable = true
+      hasFatalFlag = true
     }
+
+    // Cek LP Burn: GoPlus Solana menyimpan top holder di array `holders`.
+    // Holder pertama yang memiliki > 90% LP biasanya adalah LP pool.
+    // Kita cek apakah LP tersebut terkunci (is_locked === 1).
+    // Jika holder_count sangat rendah dan tidak ada yang terkunci, LP belum di-burn/lock.
+    const holders = tokenData.holders || []
+    const topHolder = holders[0]
+    if (topHolder) {
+      const topPercent = parseFloat(topHolder.percent || '0')
+      // Jika holder terbesar memiliki > 90% dan TIDAK terkunci, ini menandakan LP belum di-burn
+      if (topPercent > 0.9 && topHolder.is_locked === 0) {
+        isLpBurned = false
+      } else if (topPercent > 0.9 && topHolder.is_locked === 1) {
+        isLpBurned = true
+      } else {
+        // Jika tidak ada holder dominan, kita anggap LP tersebar (aman)
+        isLpBurned = true
+      }
+    }
+    // LP tidak terkunci/dibakar = fatal
+    if (!isLpBurned) {
+      hasFatalFlag = true
+    }
+
+    if (hasFatalFlag) {
+      score = 10
+    }
+
+    // === WARNING FLAGS (hanya dijalankan jika lolos dari Fatal Red Flags) ===
+    if (!hasFatalFlag) {
+      // Holder Concentration: Hitung total persentase Top 10 Holders
+      const top10Rate = holders.reduce((sum: number, h: any) => {
+        return sum + parseFloat(h.percent || '0')
+      }, 0)
+      if (top10Rate > 0.5) {
+        score -= 20
+        holderConcentrationRisk = true
+      }
+
+      // Creator Balance: Cek apakah kreator masih memegang > 10% supply
+      const creators = tokenData.creators || []
+      if (creators.length > 0) {
+        const creatorAddress = creators[0]?.address || ''
+        const creatorHolder = holders.find((h: any) => h.account === creatorAddress)
+        if (creatorHolder) {
+          const creatorPercent = parseFloat(creatorHolder.percent || '0')
+          if (creatorPercent > 0.1) {
+            score -= 15
+            creatorBalanceRisk = true
+          }
+        }
+      }
+    }
+
     if (tokenData.metadata?.symbol) {
       ticker = tokenData.metadata.symbol
     }
@@ -62,6 +124,9 @@ export const calculateSecurityScore = (tokenData: any, fallbackCa: string) => {
     score,
     mintable: isMintable,
     freezable: isFreezable,
+    lpBurned: isLpBurned,
+    holderConcentrationRisk,
+    creatorBalanceRisk,
     ticker,
     risk: score >= 80 ? "low" : score >= 50 ? "medium" : ("high" as const)
   }
