@@ -139,6 +139,20 @@ describe("Scanner Utils", () => {
       expect(result.score).toBe(10)
       expect(result.score).toBeGreaterThanOrEqual(0)
     })
+
+    it("should ignore 'Low amount of LP Providers' penalty if token ends with 'pump'", () => {
+      const pumpCa = "ETsMv6dYaDhWxgc3qUMuvTvMm67iP2knhWtH2pN2pump"
+      const rugCheck = {
+        risks: [
+          { name: "Low amount of LP Providers", value: "", level: "warn" as const }
+        ],
+        score_normalised: 90,
+        lpLockedPct: 100
+      }
+      const result = calculateSecurityScore(safeGoPlus, rugCheck, null, pumpCa)
+      // Normal penalty is -10. Because it's a pump token, penalty is 0. Score remains 100.
+      expect(result.score).toBe(100)
+    })
   })
 
   describe("shouldResetScanner", () => {

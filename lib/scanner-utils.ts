@@ -42,7 +42,7 @@ export interface ScanResult {
  */
 export const extractCAFromUrl = (url: string): string => {
   let detectedCa = ""
-  
+
   if (url.includes("dexscreener.com")) {
     if (!url.includes("/solana/")) return "" // Hanya proses jaringan Solana
     const parts = url.split("/")
@@ -58,7 +58,7 @@ export const extractCAFromUrl = (url: string): string => {
 
   // Bersihkan dari query params (?) atau fragment (#)
   detectedCa = detectedCa.split("?")[0].split("#")[0]
-  
+
   // Validasi panjang alamat Solana (sekitar 32-44 karakter)
   const isValid = detectedCa.length >= 32
   return isValid ? detectedCa : ""
@@ -199,7 +199,13 @@ export const calculateSecurityScore = (
   if (!hasFatalFlag) {
     for (const risk of risks) {
       if (risk.level === "warn") {
-        const penalty = RUGCHECK_WARN_PENALTIES[risk.name] ?? DEFAULT_WARN_PENALTY
+        let penalty = RUGCHECK_WARN_PENALTIES[risk.name] ?? DEFAULT_WARN_PENALTY
+
+        // Pengecualian untuk token Pump.fun: wajar jika jumlah LP providers sedikit (biasanya 1 pool Raydium)
+        if (risk.name === "Low amount of LP Providers" && fallbackCa.endsWith("pump")) {
+          penalty = 0
+        }
+
         score -= penalty
       }
     }
@@ -241,10 +247,10 @@ export const calculateSecurityScore = (
  */
 export const shouldResetScanner = (oldUrl: string, newUrl: string): boolean => {
   if (oldUrl === newUrl) return false
-  
+
   const oldCa = extractCAFromUrl(oldUrl)
   const newCa = extractCAFromUrl(newUrl)
-  
+
   return oldCa !== newCa
 }
 
