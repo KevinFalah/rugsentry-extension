@@ -248,6 +248,13 @@ describe("Scanner Utils", () => {
       // Normal penalty is -10. Because it's a pump token, penalty is 0. Score remains 100.
       expect(result.score).toBe(100)
     })
+
+    it("should set goPlusFailed to true if goPlusData is null", () => {
+      const result = calculateSecurityScore(null, null, null, CA)
+      expect(result.goPlusFailed).toBe(true)
+      expect(result.rugCheckFailed).toBe(true)
+      expect(result.score).toBe(100)
+    })
   })
 
   describe("shouldResetScanner", () => {

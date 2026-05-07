@@ -3,7 +3,7 @@ import { useStorage } from "@plasmohq/storage/hook"
 import type { PlasmoCSConfig } from "plasmo"
 import { useEffect, useRef, useState } from "react"
 import type { RugCheckRisk } from "~lib/scanner-utils"
-import { calculateSecurityScore, extractCAFromUrl, fetchDexScreenerMarket, fetchRugCheckReport, resolvePairAddress, shouldResetScanner } from "~lib/scanner-utils"
+import { calculateSecurityScore, extractCAFromUrl, fetchDexScreenerMarket, fetchRugCheckReport, resolvePairAddress, shouldResetScanner, fetchWithTimeout } from "~lib/scanner-utils"
 export { getStyle } from "./style"
 
 const storage = new Storage({
@@ -77,9 +77,9 @@ const Handler = () => {
   const [showBadge] = useStorage("show_badge", true)
   const [scanData, setScanData] = useState<{
     score: number, mintable: boolean, freezable: boolean,
-    risks: RugCheckRisk[], rugCheckFailed: boolean, liquidityUsd: number | null, priceChange1h: number | null,
+    risks: RugCheckRisk[], rugCheckFailed: boolean, goPlusFailed: boolean, liquidityUsd: number | null, priceChange1h: number | null,
     thinLiquidityRisk: boolean, highConcentrationRisk: boolean, highDevHoldingRisk: boolean, ticker: string
-  }>({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, highDevHoldingRisk: false, ticker: "" })
+  }>({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, goPlusFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, highDevHoldingRisk: false, ticker: "" })
 
   const CACHE_TTL = 300000 // 5 menit
 
@@ -100,7 +100,7 @@ const Handler = () => {
         if (shouldResetScanner(currentUrl, newUrl)) {
           setStatus("idle")
           setIsOpen(false)
-          setScanData({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, highDevHoldingRisk: false, ticker: "" })
+          setScanData({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, goPlusFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, highDevHoldingRisk: false, ticker: "" })
           setIsCached(false)
         }
 
@@ -125,12 +125,12 @@ const Handler = () => {
       try {
         // Step 1: Resolve CA jika ternyata Pair Address
         let actualCa = detectedCa
-        let res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
+        let res = await fetchWithTimeout(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
         let data = await res.json()
 
         if (data.code === 7012 || data.code === 7013) {
           actualCa = await resolvePairAddress(detectedCa)
-          res = await fetch(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
+          res = await fetchWithTimeout(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
           data = await res.json()
         }
 
@@ -176,6 +176,7 @@ const Handler = () => {
           freezable: result.freezable,
           risks: result.risks,
           rugCheckFailed: result.rugCheckFailed,
+          goPlusFailed: result.goPlusFailed,
           liquidityUsd: result.liquidityUsd,
           priceChange1h: result.priceChange1h,
           thinLiquidityRisk: result.thinLiquidityRisk,
@@ -209,7 +210,7 @@ const Handler = () => {
         }
       } catch (e) {
         console.error("Scan error:", e)
-        setScanData({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, highDevHoldingRisk: false, ticker: "" })
+        setScanData({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, goPlusFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, highDevHoldingRisk: false, ticker: "" })
       }
     }
 
@@ -290,14 +291,23 @@ const Handler = () => {
 
               <div className="flex flex-col gap-2 mb-5">
                 {/* Fixed: GoPlus Contract Security */}
-                <div className={`flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border transition-colors ${scanData.mintable ? 'border-red-500/30 bg-red-500/10' : 'border-slate-700/40'}`}>
-                  <span className="text-xs text-slate-200 font-medium">{scanData.mintable ? "Mint Authority Enabled" : "Mint Authority Revoked"}</span>
-                  {scanData.mintable ? <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />}
-                </div>
-                <div className={`flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border transition-colors ${scanData.freezable ? 'border-red-500/30 bg-red-500/10' : 'border-slate-700/40'}`}>
-                  <span className="text-xs text-slate-200 font-medium">{scanData.freezable ? "Freeze Authority Enabled" : "Not Freezable"}</span>
-                  {scanData.freezable ? <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />}
-                </div>
+                {scanData.goPlusFailed ? (
+                  <div className="flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border border-slate-700/40">
+                    <span className="text-xs text-slate-400 font-medium italic">GoPlus: Data unavailable</span>
+                    <AlertTriangleIcon className="w-4 h-4 text-slate-500 drop-shadow-[0_0_3px_rgba(100,116,139,0.4)]" />
+                  </div>
+                ) : (
+                  <>
+                    <div className={`flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border transition-colors ${scanData.mintable ? 'border-red-500/30 bg-red-500/10' : 'border-slate-700/40'}`}>
+                      <span className="text-xs text-slate-200 font-medium">{scanData.mintable ? "Mint Authority Enabled" : "Mint Authority Revoked"}</span>
+                      {scanData.mintable ? <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />}
+                    </div>
+                    <div className={`flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border transition-colors ${scanData.freezable ? 'border-red-500/30 bg-red-500/10' : 'border-slate-700/40'}`}>
+                      <span className="text-xs text-slate-200 font-medium">{scanData.freezable ? "Freeze Authority Enabled" : "Not Freezable"}</span>
+                      {scanData.freezable ? <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" /> : <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />}
+                    </div>
+                  </>
+                )}
 
                 {/* Dynamic: RugCheck Risks */}
                 {scanData.rugCheckFailed ? (

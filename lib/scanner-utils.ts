@@ -29,6 +29,7 @@ export interface ScanResult {
   freezable: boolean
   risks: RugCheckRisk[]
   rugCheckFailed: boolean
+  goPlusFailed: boolean
   liquidityUsd: number | null
   priceChange1h: number | null
   thinLiquidityRisk: boolean
@@ -74,11 +75,28 @@ export const extractCAFromUrl = (url: string): string => {
 // =============================================
 
 /**
+ * Fetch with timeout wrapper using AbortController.
+ * Mencegah ekstensi stuck di "Scanning..." jika server API down/pending lama.
+ */
+export const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> => {
+  const controller = new AbortController()
+  const id = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal })
+    clearTimeout(id)
+    return response
+  } catch (err) {
+    clearTimeout(id)
+    throw err
+  }
+}
+
+/**
  * Mencoba me-resolve Pair Address menjadi Token Address menggunakan DexScreener API
  */
 export const resolvePairAddress = async (address: string): Promise<string> => {
   try {
-    const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${address}`)
+    const dexRes = await fetchWithTimeout(`https://api.dexscreener.com/latest/dex/pairs/solana/${address}`)
     const dexData = await dexRes.json()
     return dexData.pairs?.[0]?.baseToken?.address || address
   } catch (e) {
@@ -93,7 +111,7 @@ export const resolvePairAddress = async (address: string): Promise<string> => {
  */
 export const fetchRugCheckReport = async (ca: string): Promise<RugCheckReport | null> => {
   try {
-    const res = await fetch(`https://api.rugcheck.xyz/v1/tokens/${ca}/report`)
+    const res = await fetchWithTimeout(`https://api.rugcheck.xyz/v1/tokens/${ca}/report`)
     if (!res.ok) return null
     const data = await res.json()
 
@@ -126,7 +144,7 @@ export const fetchRugCheckReport = async (ca: string): Promise<RugCheckReport | 
  */
 export const fetchDexScreenerMarket = async (ca: string): Promise<DexMarketData | null> => {
   try {
-    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${ca}`)
+    const res = await fetchWithTimeout(`https://api.dexscreener.com/latest/dex/tokens/${ca}`)
     if (!res.ok) return null
     const data = await res.json()
     const pair = data.pairs?.[0]
@@ -296,6 +314,7 @@ export const calculateSecurityScore = (
     freezable: isFreezable,
     risks,
     rugCheckFailed: rugCheckData === null,
+    goPlusFailed: goPlusData === null,
     liquidityUsd: dexData?.liquidityUsd ?? null,
     priceChange1h: dexData?.priceChange1h ?? null,
     thinLiquidityRisk,
