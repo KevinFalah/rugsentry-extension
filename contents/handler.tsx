@@ -73,12 +73,15 @@ const Handler = () => {
   const [ca, setCa] = useState("")
   const [currentUrl, setCurrentUrl] = useState(window.location.href)
   const scanIdRef = useRef(0) // Race condition guard
+  const [isCached, setIsCached] = useState(false)
   const [showBadge] = useStorage("show_badge", true)
   const [scanData, setScanData] = useState<{
     score: number, mintable: boolean, freezable: boolean,
     risks: RugCheckRisk[], rugCheckFailed: boolean, liquidityUsd: number | null, priceChange1h: number | null,
     thinLiquidityRisk: boolean, highConcentrationRisk: boolean, highDevHoldingRisk: boolean, ticker: string
   }>({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, highDevHoldingRisk: false, ticker: "" })
+
+  const CACHE_TTL = 300000 // 5 menit
 
   // Function to extract CA from URL
   const extractCA = () => {
@@ -98,6 +101,7 @@ const Handler = () => {
           setStatus("idle")
           setIsOpen(false)
           setScanData({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, highDevHoldingRisk: false, ticker: "" })
+          setIsCached(false)
         }
 
         setCa(extractCAFromUrl(newUrl))
@@ -114,6 +118,7 @@ const Handler = () => {
 
     const detectedCa = extractCA()
     setStatus("scanning")
+    setIsCached(false)
     const currentScanId = ++scanIdRef.current
 
     if (detectedCa) {
@@ -129,9 +134,28 @@ const Handler = () => {
           data = await res.json()
         }
 
+        // Race condition guard
+        if (scanIdRef.current !== currentScanId) return
+
+        // Step 2: Check cache (TTL 5 menit)
+        const CACHE_KEY = `scan_cache_${actualCa}`
+        try {
+          const cached = await storage.get<{ data: any, timestamp: number }>(CACHE_KEY)
+          if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+            setCa(actualCa)
+            setScanData(cached.data)
+            setIsCached(true)
+            setStatus("done")
+            setIsOpen(true)
+            return // Gunakan cache, skip API calls
+          }
+        } catch (e) {
+          console.error("Cache read error:", e)
+        }
+
         const goPlusData = data.result ? Object.values(data.result)[0] as any : null
 
-        // Step 2: Fetch RugCheck + DexScreener secara PARALEL
+        // Step 3: Fetch RugCheck + DexScreener secara PARALEL
         const [rugCheckResult, dexResult] = await Promise.allSettled([
           fetchRugCheckReport(actualCa),
           fetchDexScreenerMarket(actualCa)
@@ -140,14 +164,13 @@ const Handler = () => {
         const rugCheckData = rugCheckResult.status === 'fulfilled' ? rugCheckResult.value : null
         const dexData = dexResult.status === 'fulfilled' ? dexResult.value : null
 
-        // Step 3: Hitung skor gabungan dari 3 sumber
+        // Step 4: Hitung skor gabungan dari 3 sumber
         const result = calculateSecurityScore(goPlusData, rugCheckData, dexData, actualCa)
 
         // Race condition guard: abort jika user sudah pindah ke token lain
         if (scanIdRef.current !== currentScanId) return
 
-        setCa(actualCa)
-        setScanData({
+        const scanDataPayload = {
           score: result.score,
           mintable: result.mintable,
           freezable: result.freezable,
@@ -159,10 +182,15 @@ const Handler = () => {
           highConcentrationRisk: result.highConcentrationRisk,
           highDevHoldingRisk: result.highDevHoldingRisk,
           ticker: result.ticker
-        })
+        }
 
-        // Persistence
+        setCa(actualCa)
+        setScanData(scanDataPayload)
+
+        // Step 5: Save to cache + history
         try {
+          await storage.set(CACHE_KEY, { data: scanDataPayload, timestamp: Date.now() })
+
           const scanResult = {
             id: Date.now().toString(),
             ticker: result.ticker,
@@ -181,7 +209,6 @@ const Handler = () => {
         }
       } catch (e) {
         console.error("Scan error:", e)
-        // Fallback UI jika terjadi error fatal
         setScanData({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, highDevHoldingRisk: false, ticker: "" })
       }
     }
@@ -222,7 +249,7 @@ const Handler = () => {
                     {scanData.score >= 80 ? <ShieldIcon className="w-3 h-3" /> : <AlertTriangleIcon className="w-3 h-3" />}
                     {scanData.score >= 80 ? 'HIGH TRUST' : scanData.score >= 50 ? 'MEDIUM RISK' : 'DANGER'}
                   </span>
-                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest opacity-60">v1.2 Live</span>
+                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest opacity-60">{isCached ? 'Cached' : 'v1.2 Live'}</span>
                 </div>
               )}
             </div>
