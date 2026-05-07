@@ -1,7 +1,5 @@
 
-// =============================================
 // TYPES
-// =============================================
 
 export interface RugCheckRisk {
   name: string
@@ -39,22 +37,20 @@ export interface ScanResult {
   risk: "low" | "medium" | "high"
 }
 
-// =============================================
 // URL EXTRACTION
-// =============================================
 
 /**
- * Mengambil Contract Address dari URL DexScreener, Birdeye, atau Pump.fun
+ * Extracts the Contract Address from DexScreener, Birdeye, or Pump.fun URLs
  */
 export const extractCAFromUrl = (url: string): string => {
   let detectedCa = ""
 
   if (url.includes("dexscreener.com")) {
-    if (!url.includes("/solana/")) return "" // Hanya proses jaringan Solana
+    if (!url.includes("/solana/")) return "" // Only process Solana network
     const parts = url.split("/")
     detectedCa = parts[parts.length - 1] || ""
   } else if (url.includes("birdeye.so")) {
-    if (!url.includes("chain=solana") && !url.includes("/solana/")) return "" // Hanya proses jaringan Solana
+    if (!url.includes("chain=solana") && !url.includes("/solana/")) return "" // Only process Solana network
     const parts = url.split("/")
     detectedCa = parts[parts.length - 1] || ""
   } else if (url.includes("pump.fun")) {
@@ -62,21 +58,14 @@ export const extractCAFromUrl = (url: string): string => {
     detectedCa = parts[parts.length - 1] || ""
   }
 
-  // Bersihkan dari query params (?) atau fragment (#)
-  detectedCa = detectedCa.split("?")[0].split("#")[0]
-
-  // Validasi panjang alamat Solana (sekitar 32-44 karakter)
-  const isValid = detectedCa.length >= 32
-  return isValid ? detectedCa : ""
+  return detectedCa.length >= 32 ? detectedCa : ""
 }
 
-// =============================================
 // API FETCHERS
-// =============================================
 
 /**
  * Fetch with timeout wrapper using AbortController.
- * Mencegah ekstensi stuck di "Scanning..." jika server API down/pending lama.
+ * Prevents the extension from getting stuck if API servers are down or pending for too long.
  */
 export const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> => {
   const controller = new AbortController()
@@ -92,7 +81,7 @@ export const fetchWithTimeout = async (url: string, options: RequestInit = {}, t
 }
 
 /**
- * Mencoba me-resolve Pair Address menjadi Token Address menggunakan DexScreener API
+ * Attempts to resolve a Pair Address into a Token Address using the DexScreener API
  */
 export const resolvePairAddress = async (address: string): Promise<string> => {
   try {
@@ -106,8 +95,8 @@ export const resolvePairAddress = async (address: string): Promise<string> => {
 }
 
 /**
- * Mengambil laporan keamanan token dari RugCheck API.
- * Endpoint ini GRATIS dan tidak memerlukan API key.
+ * Fetches token security report from RugCheck API.
+ * This endpoint is free and does not require an API key.
  */
 export const fetchRugCheckReport = async (ca: string): Promise<RugCheckReport | null> => {
   try {
@@ -115,7 +104,7 @@ export const fetchRugCheckReport = async (ca: string): Promise<RugCheckReport | 
     if (!res.ok) return null
     const data = await res.json()
 
-    // Hitung persentase holding milik Creator
+    // Calculate creator holding percentage
     const creatorAddress = data.creator || ""
     const topHolders = data.topHolders || []
     const devHoldingPct = topHolders
@@ -139,8 +128,8 @@ export const fetchRugCheckReport = async (ca: string): Promise<RugCheckReport | 
 }
 
 /**
- * Mengambil data pasar token dari DexScreener API.
- * Menggunakan endpoint token search (bukan pairs).
+ * Fetches token market data from DexScreener API.
+ * Uses the token search endpoint (not pairs).
  */
 export const fetchDexScreenerMarket = async (ca: string): Promise<DexMarketData | null> => {
   try {
@@ -151,7 +140,7 @@ export const fetchDexScreenerMarket = async (ca: string): Promise<DexMarketData 
     if (!pair) return null
     return {
       liquidityUsd: pair.liquidity?.usd ?? 0,
-      marketCap: pair.marketCap ?? pair.fdv ?? 0, // fdv adalah fallback jika marketCap kosong
+      marketCap: pair.marketCap ?? pair.fdv ?? 0, // fdv is a fallback if marketCap is missing
       priceChange1h: pair.priceChange?.h1 ?? 0,
       priceChange6h: pair.priceChange?.h6 ?? 0
     }
@@ -161,13 +150,11 @@ export const fetchDexScreenerMarket = async (ca: string): Promise<DexMarketData 
   }
 }
 
-// =============================================
 // SCORING ENGINE (Dual-Engine: GoPlus + RugCheck + DexScreener)
-// =============================================
 
 /**
- * Mapping dari nama risiko RugCheck ke jumlah poin pengurangan.
- * Ini memastikan setiap jenis peringatan memiliki bobot yang konsisten.
+ * Mapping of RugCheck risk names to penalty points.
+ * Ensures consistent weighting for each alert type.
  */
 const RUGCHECK_WARN_PENALTIES: Record<string, number> = {
   "Single holder ownership": 15,
@@ -179,8 +166,8 @@ const RUGCHECK_WARN_PENALTIES: Record<string, number> = {
 const DEFAULT_WARN_PENALTY = 5
 
 /**
- * Daftar alamat LP/Burn publik yang diketahui untuk dikecualikan dari perhitungan konsentrasi holder.
- * Sumber: Raydium, Pump.fun, Solana native burn/null address.
+ * List of known public LP/Burn addresses to exclude from holder concentration calculations.
+ * Sources: Raydium, Pump.fun, Solana native burn/null addresses.
  */
 const KNOWN_LP_AND_BURN_ADDRESSES = new Set([
   "11111111111111111111111111111111",           // Solana null/system address
@@ -265,8 +252,8 @@ export const calculateSecurityScore = (
   }
 
   // ── TIER 2.5: GoPlus Sybil/Cluster Concentration Check ──
-  // Cek top 10 holders, kecualikan alamat LP/Burn yang diketahui
-  // Jika total konsentrasi bersih > 40%, kurangi 25 poin
+  // Check top 10 holders, excluding known LP/Burn addresses.
+  // If clean concentration > 40%, deduct 25 points.
   if (!hasFatalFlag && goPlusData) {
     const holders: any[] = goPlusData.holders || []
     const top10 = holders.slice(0, 10)
@@ -325,13 +312,11 @@ export const calculateSecurityScore = (
   }
 }
 
-// =============================================
 // NAVIGATION GUARD
-// =============================================
 
 /**
- * Menentukan apakah scanner harus di-reset berdasarkan perubahan URL.
- * Kita hanya reset jika CA yang terdeteksi di URL benar-benar berubah.
+ * Determines if the scanner should reset based on URL changes.
+ * Only reset if the detected Contract Address (CA) has actually changed.
  */
 export const shouldResetScanner = (oldUrl: string, newUrl: string): boolean => {
   if (oldUrl === newUrl) return false

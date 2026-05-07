@@ -81,7 +81,7 @@ const Handler = () => {
     thinLiquidityRisk: boolean, highConcentrationRisk: boolean, highDevHoldingRisk: boolean, ticker: string
   }>({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, goPlusFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, highDevHoldingRisk: false, ticker: "" })
 
-  const CACHE_TTL = 300000 // 5 menit
+  const CACHE_TTL = 300000 // 5 minutes
 
   // Function to extract CA from URL
   const extractCA = () => {
@@ -96,7 +96,7 @@ const Handler = () => {
     const checkUrlChange = () => {
       const newUrl = window.location.href
       if (newUrl !== currentUrl) {
-        // Gunakan utility yang sudah teruji untuk menentukan apakah harus reset
+        // Use a proven utility to determine if a reset is required
         if (shouldResetScanner(currentUrl, newUrl)) {
           setStatus("idle")
           setIsOpen(false)
@@ -123,7 +123,7 @@ const Handler = () => {
 
     if (detectedCa) {
       try {
-        // Step 1: Resolve CA jika ternyata Pair Address
+        // Step 1: Resolve CA if it is a Pair Address
         let actualCa = detectedCa
         let res = await fetchWithTimeout(`https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${actualCa}`)
         let data = await res.json()
@@ -134,10 +134,9 @@ const Handler = () => {
           data = await res.json()
         }
 
-        // Race condition guard
         if (scanIdRef.current !== currentScanId) return
 
-        // Step 2: Check cache (TTL 5 menit)
+        // Step 2: Check cache (5-minute TTL)
         const CACHE_KEY = `scan_cache_${actualCa}`
         try {
           const cached = await storage.get<{ data: any, timestamp: number }>(CACHE_KEY)
@@ -147,7 +146,7 @@ const Handler = () => {
             setIsCached(true)
             setStatus("done")
             setIsOpen(true)
-            return // Gunakan cache, skip API calls
+            return;
           }
         } catch (e) {
           console.error("Cache read error:", e)
@@ -155,7 +154,7 @@ const Handler = () => {
 
         const goPlusData = data.result ? Object.values(data.result)[0] as any : null
 
-        // Step 3: Fetch RugCheck + DexScreener secara PARALEL
+        // Step 3: Fetch RugCheck + DexScreener in PARALLEL
         const [rugCheckResult, dexResult] = await Promise.allSettled([
           fetchRugCheckReport(actualCa),
           fetchDexScreenerMarket(actualCa)
@@ -164,10 +163,9 @@ const Handler = () => {
         const rugCheckData = rugCheckResult.status === 'fulfilled' ? rugCheckResult.value : null
         const dexData = dexResult.status === 'fulfilled' ? dexResult.value : null
 
-        // Step 4: Hitung skor gabungan dari 3 sumber
+        // Step 4: Calculate combined security score from 3 sources
         const result = calculateSecurityScore(goPlusData, rugCheckData, dexData, actualCa)
 
-        // Race condition guard: abort jika user sudah pindah ke token lain
         if (scanIdRef.current !== currentScanId) return
 
         const scanDataPayload = {
@@ -188,7 +186,7 @@ const Handler = () => {
         setCa(actualCa)
         setScanData(scanDataPayload)
 
-        // Step 5: Save to cache + history
+        // Step 5: Save to cache and history
         try {
           await storage.set(CACHE_KEY, { data: scanDataPayload, timestamp: Date.now() })
 
@@ -290,7 +288,7 @@ const Handler = () => {
               </div>
 
               <div className="flex flex-col gap-2 mb-5">
-                {/* Fixed: GoPlus Contract Security */}
+                {/* GoPlus Contract Security */}
                 {scanData.goPlusFailed ? (
                   <div className="flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border border-slate-700/40">
                     <span className="text-xs text-slate-400 font-medium italic">GoPlus: Data unavailable</span>
@@ -309,7 +307,7 @@ const Handler = () => {
                   </>
                 )}
 
-                {/* Dynamic: RugCheck Risks */}
+                {/* RugCheck Risks */}
                 {scanData.rugCheckFailed ? (
                   <div className="flex justify-between items-center bg-slate-800/40 rounded-lg px-3 py-2.5 border border-slate-700/40">
                     <span className="text-xs text-slate-400 font-medium italic">RugCheck: Data unavailable</span>
@@ -427,5 +425,3 @@ const Handler = () => {
 }
 
 export default Handler
-
-//! Lanjut ke Audit Code

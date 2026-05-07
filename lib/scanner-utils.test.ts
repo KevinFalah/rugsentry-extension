@@ -93,19 +93,19 @@ describe("Scanner Utils", () => {
     })
 
     it("should deduct 30 for Liquidity Trap (Liquidity/MarketCap ratio < 2%)", () => {
-      // Market Cap 1 Juta, Liquidity cuma 10 ribu (rasio 1%)
+      // Market Cap 1M, Liquidity only 10K (1% ratio)
       const dexData = { liquidityUsd: 10000, marketCap: 1000000, priceChange1h: 0, priceChange6h: 0 }
       const result = calculateSecurityScore(safeGoPlus, { risks: [], score_normalised: 100, lpLockedPct: 100 }, dexData, CA)
-      
+
       expect(result.score).toBe(70) // 100 - 30
       expect(result.thinLiquidityRisk).toBe(true)
     })
 
     it("should NOT deduct 30 if Liquidity/MarketCap ratio is healthy (>= 2%)", () => {
-      // Market Cap 1 Juta, Liquidity 50 ribu (rasio 5%)
+      // Market Cap 1M, Liquidity 50K (5% ratio)
       const dexData = { liquidityUsd: 50000, marketCap: 1000000, priceChange1h: 0, priceChange6h: 0 }
       const result = calculateSecurityScore(safeGoPlus, { risks: [], score_normalised: 100, lpLockedPct: 100 }, dexData, CA)
-      
+
       expect(result.score).toBe(100)
       expect(result.thinLiquidityRisk).toBe(false)
     })
@@ -117,7 +117,7 @@ describe("Scanner Utils", () => {
           { account: "whale1", percent: "0.20" }, // 20%
           { account: "whale2", percent: "0.15" }, // 15%
           { account: "whale3", percent: "0.10" }, // 10% → total 45%
-          { account: "user4",  percent: "0.05" },
+          { account: "user4", percent: "0.05" },
         ]
       }
       const result = calculateSecurityScore(goPlusWithHolders, { risks: [], score_normalised: 100, lpLockedPct: 100 }, null, CA)
@@ -147,13 +147,13 @@ describe("Scanner Utils", () => {
       const goPlusWithHolders = {
         ...safeGoPlus,
         holders: [
-          { account: raydiumLpAddress, percent: "0.60" }, // 60% LP — harus diabaikan
-          { account: burnAddress,      percent: "0.15" }, // 15% burn — harus diabaikan
-          { account: "whale1",         percent: "0.20" }, // 20% holder biasa
-          { account: "user1",          percent: "0.05" }, // 5% holder biasa
+          { account: raydiumLpAddress, percent: "0.60" },
+          { account: burnAddress, percent: "0.15" },
+          { account: "whale1", percent: "0.20" },
+          { account: "user1", percent: "0.05" },
         ]
       }
-      // Setelah LP & burn diabaikan, konsentrasi bersih = 20% + 5% = 25% (di bawah 40%)
+      // After LP & burn are ignored, clean concentration = 20% + 5% = 25% (below 40%)
       const result = calculateSecurityScore(goPlusWithHolders, { risks: [], score_normalised: 100, lpLockedPct: 100 }, null, CA)
 
       expect(result.score).toBe(100)
@@ -166,7 +166,7 @@ describe("Scanner Utils", () => {
         risks: [],
         score_normalised: 100,
         lpLockedPct: 100,
-        devHoldingPct: 5 // 5% holding (lebih dari 3%)
+        devHoldingPct: 5 // 5% holding (more than 3%)
       }
       const result = calculateSecurityScore(safeGoPlus, rugCheck, null, pumpCa)
       expect(result.score).toBe(80) // 100 - 20
@@ -179,7 +179,7 @@ describe("Scanner Utils", () => {
         risks: [],
         score_normalised: 100,
         lpLockedPct: 100,
-        devHoldingPct: 2.5 // 2.5% holding (aman)
+        devHoldingPct: 2.5 // 2.5% holding (safe)
       }
       const result = calculateSecurityScore(safeGoPlus, rugCheck, null, pumpCa)
       expect(result.score).toBe(100)
