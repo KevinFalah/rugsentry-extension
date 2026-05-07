@@ -76,8 +76,8 @@ const Handler = () => {
   const [scanData, setScanData] = useState<{
     score: number, mintable: boolean, freezable: boolean,
     risks: RugCheckRisk[], rugCheckFailed: boolean, liquidityUsd: number | null, priceChange1h: number | null,
-    thinLiquidityRisk: boolean, highConcentrationRisk: boolean, ticker: string
-  }>({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, ticker: "" })
+    thinLiquidityRisk: boolean, highConcentrationRisk: boolean, highDevHoldingRisk: boolean, ticker: string
+  }>({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, highDevHoldingRisk: false, ticker: "" })
 
   // Function to extract CA from URL
   const extractCA = () => {
@@ -96,9 +96,9 @@ const Handler = () => {
         if (shouldResetScanner(currentUrl, newUrl)) {
           setStatus("idle")
           setIsOpen(false)
-          setScanData({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, ticker: "" })
+          setScanData({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, highDevHoldingRisk: false, ticker: "" })
         }
-        
+
         setCa(extractCAFromUrl(newUrl))
         setCurrentUrl(newUrl)
       }
@@ -152,6 +152,7 @@ const Handler = () => {
           priceChange1h: result.priceChange1h,
           thinLiquidityRisk: result.thinLiquidityRisk,
           highConcentrationRisk: result.highConcentrationRisk,
+          highDevHoldingRisk: result.highDevHoldingRisk,
           ticker: result.ticker
         })
 
@@ -210,8 +211,8 @@ const Handler = () => {
               {isValidCA && (
                 <div className="flex items-center gap-2 mt-2.5">
                   <span className={`px-2 py-1 rounded text-[10px] font-extrabold border flex items-center gap-1.5 tracking-widest uppercase transition-all duration-500 ${scanData.score >= 80 ? 'bg-success/10 text-success border-success/20' :
-                      scanData.score >= 50 ? 'bg-warning/10 text-warning border-warning/20' :
-                        'bg-red-500/10 text-red-500 border-red-500/20'
+                    scanData.score >= 50 ? 'bg-warning/10 text-warning border-warning/20' :
+                      'bg-red-500/10 text-red-500 border-red-500/20'
                     }`}>
                     {scanData.score >= 80 ? <ShieldIcon className="w-3 h-3" /> : <AlertTriangleIcon className="w-3 h-3" />}
                     {scanData.score >= 80 ? 'HIGH TRUST' : scanData.score >= 50 ? 'MEDIUM RISK' : 'DANGER'}
@@ -279,8 +280,8 @@ const Handler = () => {
                         {risk.name}{risk.value ? ` (${risk.value})` : ''}
                       </span>
                       {risk.level === 'danger' ? <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" /> :
-                       risk.level === 'warn' ? <AlertTriangleIcon className="w-4 h-4 text-yellow-500 drop-shadow-[0_0_3px_rgba(234,179,8,0.4)]" /> :
-                       <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />}
+                        risk.level === 'warn' ? <AlertTriangleIcon className="w-4 h-4 text-yellow-500 drop-shadow-[0_0_3px_rgba(234,179,8,0.4)]" /> :
+                          <CheckCircleIcon className="w-4 h-4 text-success drop-shadow-[0_0_3px_rgba(34,197,94,0.4)]" />}
                     </div>
                   ))
                 ) : (
@@ -290,7 +291,13 @@ const Handler = () => {
                   </div>
                 )}
 
-                {/* Bonus: DexScreener Liquidity */}
+                {/* DexScreener Liquidity & Holder Penalties */}
+                {scanData.highDevHoldingRisk && (
+                  <div className="flex justify-between items-center bg-red-500/10 rounded-lg px-3 py-2.5 border border-red-500/30 transition-colors">
+                    <span className="text-xs text-slate-200 font-medium">Dev Holding &gt; 3% (Pump.fun)</span>
+                    <AlertTriangleIcon className="w-4 h-4 text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]" />
+                  </div>
+                )}
                 {scanData.highConcentrationRisk && (
                   <div className="flex justify-between items-center bg-yellow-500/5 rounded-lg px-3 py-2.5 border border-yellow-500/30 transition-colors">
                     <span className="text-xs text-slate-200 font-medium">High Top 10 Concentration (&gt;40%)</span>
@@ -323,8 +330,8 @@ const Handler = () => {
                 onClick={() => window.open(`https://jup.ag/swap?sell=${ca}&buy=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`, '_blank')}
                 disabled={status === "scanning" || !isValidCA}
                 className={`w-full font-bold py-3 rounded-xl flex justify-center items-center gap-2 transition-all ${status === "scanning" || !isValidCA
-                    ? "bg-slate-700 text-slate-500 cursor-not-allowed"
-                    : "bg-primary hover:bg-primary/90 text-neutral shadow-[0_0_15px_rgba(56,189,248,0.4)] hover:shadow-[0_0_20px_rgba(56,189,248,0.6)]"
+                  ? "bg-slate-700 text-slate-500 cursor-not-allowed"
+                  : "bg-primary hover:bg-primary/90 text-neutral shadow-[0_0_15px_rgba(56,189,248,0.4)] hover:shadow-[0_0_20px_rgba(56,189,248,0.6)]"
                   }`}
               >
                 <RefreshCwIcon className="w-5 h-5" />
@@ -356,11 +363,11 @@ const Handler = () => {
         onClick={status === "done" ? () => setIsOpen(!isOpen) : handleScan}
         disabled={status === "scanning"}
         className={`flex items-center gap-3 bg-neutral/90 backdrop-blur-md border px-5 py-2.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.5)] transition-all group ${status === "scanning" ? "border-primary shadow-[0_0_15px_rgba(56,189,248,0.3)]" :
-            status === "done" ? (isValidCA ? "border-success hover:border-success" : "border-warning hover:border-warning") : "border-slate-600 hover:border-slate-400"
+          status === "done" ? (isValidCA ? "border-success hover:border-success" : "border-warning hover:border-warning") : "border-slate-600 hover:border-slate-400"
           }`}
       >
         <div className={`p-1.5 rounded-full transition-colors ${status === "scanning" ? "bg-primary/20 text-primary shadow-[0_0_10px_rgba(56,189,248,0.4)]" :
-            status === "done" ? (isValidCA ? "bg-success/20 text-success shadow-[0_0_10px_rgba(34,197,94,0.4)]" : "bg-warning/20 text-warning shadow-[0_0_10px_rgba(241,160,43,0.4)]") : "bg-slate-700 text-slate-400"
+          status === "done" ? (isValidCA ? "bg-success/20 text-success shadow-[0_0_10px_rgba(34,197,94,0.4)]" : "bg-warning/20 text-warning shadow-[0_0_10px_rgba(241,160,43,0.4)]") : "bg-slate-700 text-slate-400"
           }`}>
           {status === "scanning" ? <LoaderIcon className="w-4 h-4" /> : (status === "done" && !isValidCA ? <AlertTriangleIcon className="w-4 h-4" /> : <ShieldIcon className="w-4 h-4" />)}
         </div>
@@ -378,3 +385,5 @@ const Handler = () => {
 }
 
 export default Handler
+
+//! Lanjut ke Audit Code

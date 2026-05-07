@@ -13,6 +13,7 @@ export interface RugCheckReport {
   risks: RugCheckRisk[]
   score_normalised: number
   lpLockedPct: number
+  devHoldingPct: number
 }
 
 export interface DexMarketData {
@@ -32,6 +33,7 @@ export interface ScanResult {
   priceChange1h: number | null
   thinLiquidityRisk: boolean
   highConcentrationRisk: boolean
+  highDevHoldingRisk: boolean
   ticker: string
   risk: "low" | "medium" | "high"
 }
@@ -91,9 +93,17 @@ export const resolvePairAddress = async (address: string): Promise<string> => {
  */
 export const fetchRugCheckReport = async (ca: string): Promise<RugCheckReport | null> => {
   try {
-    const res = await fetch(`https://api.rugcheck.xyz/v1/tokens/${ca}/report/summary`)
+    const res = await fetch(`https://api.rugcheck.xyz/v1/tokens/${ca}/report`)
     if (!res.ok) return null
     const data = await res.json()
+
+    // Hitung persentase holding milik Creator
+    const creatorAddress = data.creator || ""
+    const topHolders = data.topHolders || []
+    const devHoldingPct = topHolders
+      .filter((h: any) => h.owner === creatorAddress)
+      .reduce((sum: number, h: any) => sum + (h.pct || 0), 0)
+
     return {
       risks: (data.risks || []).map((r: any) => ({
         name: r.name || "",
@@ -101,7 +111,8 @@ export const fetchRugCheckReport = async (ca: string): Promise<RugCheckReport | 
         level: r.level === "danger" ? "danger" : r.level === "warn" ? "warn" : "info"
       })),
       score_normalised: data.score_normalised ?? 100,
-      lpLockedPct: data.lpLockedPct ?? 0
+      lpLockedPct: data.lpLockedPct ?? 0,
+      devHoldingPct
     }
   } catch (e) {
     console.error("RugCheck API failed:", e)
@@ -162,8 +173,8 @@ const KNOWN_LP_AND_BURN_ADDRESSES = new Set([
 ])
 
 /**
- * Menghitung skor keamanan berdasarkan data dari GoPlus + RugCheck + DexScreener.
- * Standar Web3 Professional Security Assessment.
+ * Calculates a security score based on data from GoPlus + RugCheck + DexScreener.
+ * Web3 Professional Security Assessment Standard.
  * 
  * Scoring Flow:
  * 1. Start with base score = 100
@@ -184,6 +195,7 @@ export const calculateSecurityScore = (
   let isFreezable = false
   let thinLiquidityRisk = false
   let highConcentrationRisk = false
+  let highDevHoldingRisk = false
   let ticker = fallbackCa.slice(0, 4).toUpperCase()
   let hasFatalFlag = false
 
@@ -226,6 +238,12 @@ export const calculateSecurityScore = (
         score -= penalty
       }
     }
+
+    // ── TIER 2.1: Pump.fun Dev Holding Risk ──
+    if (fallbackCa.endsWith("pump") && rugCheckData && rugCheckData.devHoldingPct > 3) {
+      score -= 20
+      highDevHoldingRisk = true
+    }
   }
 
   // ── TIER 2.5: GoPlus Sybil/Cluster Concentration Check ──
@@ -257,7 +275,7 @@ export const calculateSecurityScore = (
     if (dexData.priceChange1h < -50) {
       score -= 10
     }
-    
+
     // Liquidity Trap Penalty: Liquidity / MarketCap ratio < 2%
     if (dexData.marketCap > 0) {
       const ratio = dexData.liquidityUsd / dexData.marketCap
@@ -281,6 +299,7 @@ export const calculateSecurityScore = (
     priceChange1h: dexData?.priceChange1h ?? null,
     thinLiquidityRisk,
     highConcentrationRisk,
+    highDevHoldingRisk,
     ticker,
     risk: score >= 80 ? "low" : score >= 50 ? "medium" : ("high" as const)
   }

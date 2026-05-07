@@ -160,6 +160,32 @@ describe("Scanner Utils", () => {
       expect(result.highConcentrationRisk).toBe(false)
     })
 
+    it("should deduct 20 for Dev Holding > 3% on Pump.fun token", () => {
+      const pumpCa = "ETsMv6dYaDhWxgc3qUMuvTvMm67iP2knhWtH2pN2pump"
+      const rugCheck = {
+        risks: [],
+        score_normalised: 100,
+        lpLockedPct: 100,
+        devHoldingPct: 5 // 5% holding (lebih dari 3%)
+      }
+      const result = calculateSecurityScore(safeGoPlus, rugCheck, null, pumpCa)
+      expect(result.score).toBe(80) // 100 - 20
+      expect(result.highDevHoldingRisk).toBe(true)
+    })
+
+    it("should NOT deduct for Dev Holding if <= 3%", () => {
+      const pumpCa = "ETsMv6dYaDhWxgc3qUMuvTvMm67iP2knhWtH2pN2pump"
+      const rugCheck = {
+        risks: [],
+        score_normalised: 100,
+        lpLockedPct: 100,
+        devHoldingPct: 2.5 // 2.5% holding (aman)
+      }
+      const result = calculateSecurityScore(safeGoPlus, rugCheck, null, pumpCa)
+      expect(result.score).toBe(100)
+      expect(result.highDevHoldingRisk).toBe(false)
+    })
+
     it("should stack RugCheck warnings + DexScreener penalties", () => {
       const rugCheck = {
         risks: [{ name: "High holder concentration", value: "", level: "warn" as const }],
@@ -215,7 +241,8 @@ describe("Scanner Utils", () => {
           { name: "Low amount of LP Providers", value: "", level: "warn" as const }
         ],
         score_normalised: 90,
-        lpLockedPct: 100
+        lpLockedPct: 100,
+        devHoldingPct: 0
       }
       const result = calculateSecurityScore(safeGoPlus, rugCheck, null, pumpCa)
       // Normal penalty is -10. Because it's a pump token, penalty is 0. Score remains 100.
