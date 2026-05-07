@@ -1,7 +1,7 @@
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 import type { PlasmoCSConfig } from "plasmo"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { RugCheckRisk } from "~lib/scanner-utils"
 import { calculateSecurityScore, extractCAFromUrl, fetchDexScreenerMarket, fetchRugCheckReport, resolvePairAddress, shouldResetScanner } from "~lib/scanner-utils"
 export { getStyle } from "./style"
@@ -72,6 +72,7 @@ const Handler = () => {
   const [status, setStatus] = useState<"idle" | "scanning" | "done">("idle")
   const [ca, setCa] = useState("")
   const [currentUrl, setCurrentUrl] = useState(window.location.href)
+  const scanIdRef = useRef(0) // Race condition guard
   const [showBadge] = useStorage("show_badge", true)
   const [scanData, setScanData] = useState<{
     score: number, mintable: boolean, freezable: boolean,
@@ -113,6 +114,7 @@ const Handler = () => {
 
     const detectedCa = extractCA()
     setStatus("scanning")
+    const currentScanId = ++scanIdRef.current
 
     if (detectedCa) {
       try {
@@ -140,6 +142,9 @@ const Handler = () => {
 
         // Step 3: Hitung skor gabungan dari 3 sumber
         const result = calculateSecurityScore(goPlusData, rugCheckData, dexData, actualCa)
+
+        // Race condition guard: abort jika user sudah pindah ke token lain
+        if (scanIdRef.current !== currentScanId) return
 
         setCa(actualCa)
         setScanData({
@@ -177,7 +182,7 @@ const Handler = () => {
       } catch (e) {
         console.error("Scan error:", e)
         // Fallback UI jika terjadi error fatal
-        setScanData({ score: 100, mintable: false, freezable: false, risks: [], liquidityUsd: null, priceChange1h: null, ticker: "" })
+        setScanData({ score: 100, mintable: false, freezable: false, risks: [], rugCheckFailed: false, liquidityUsd: null, priceChange1h: null, thinLiquidityRisk: false, highConcentrationRisk: false, highDevHoldingRisk: false, ticker: "" })
       }
     }
 

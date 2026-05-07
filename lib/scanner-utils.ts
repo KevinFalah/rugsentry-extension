@@ -258,7 +258,8 @@ export const calculateSecurityScore = (
         || addr.startsWith("raydium") // Raydium naming convention
         || h.tag === "LiquidityVault"  // GoPlus tagging
       if (isExcluded) return sum
-      return sum + parseFloat(h.percent || '0')
+      const pct = parseFloat(h.percent || '0')
+      return sum + (Number.isFinite(pct) ? pct : 0)
     }, 0)
 
     if (cleanConcentration > 0.40) {
