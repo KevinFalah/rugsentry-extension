@@ -1,15 +1,18 @@
 # Rugsentry
 > **The Ultimate Real-time Security Shield for Solana Traders**
 
-![Rugsentry Banner](<!-- TODO: Insert Hero/Banner Image Here -->)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Platform](https://img.shields.io/badge/platform-Chrome-orange)
+![Engine](https://img.shields.io/badge/security-dual--engine-red)
+
+![Rugsentry Banner](assets/banner-docs.jpeg)
 
 ## 📖 Overview
 Rugsentry is a high-performance, context-aware Chrome extension built specifically for the Solana ecosystem. It acts as an automated security auditor right in your browser, shielding traders from the most common and devastating DeFi vectors: **Rugpulls, Honeypots, and Illiquid Traps**. 
 
 By injecting real-time risk assessments directly into popular DEX interfaces like DexScreener, Birdeye, and Pump.fun, Rugsentry ensures that users can make informed, lightning-fast trading decisions without having to manually verify contract safety.
 
-<!-- TODO: Insert Screenshot of Rugsentry working on DexScreener Here -->
-*Screenshot: Rugsentry overlay on DexScreener*
 
 ## 🏗️ Core Architecture (The Dual-Engine)
 Rugsentry employs a robust, multi-layered security engine that aggregates data from industry-leading APIs in real-time to generate a comprehensive 0-100 Trust Score:
@@ -20,8 +23,12 @@ Rugsentry employs a robust, multi-layered security engine that aggregates data f
 | **Holder & LP Analysis** | [RugCheck API](https://rugcheck.xyz/) | Analyzes liquidity locks, developer token holding percentages, and LP provider diversity. |
 | **Market Context** | [DexScreener API](https://dexscreener.com/) | Evaluates liquidity depth, liquidity-to-market-cap ratios (Liquidity Traps), and extreme price action (Massive Dumps). |
 
-<!-- TODO: Insert Screenshot of Rugsentry working on Pump.fun Here -->
-*Screenshot: Rugsentry overlay on Pump.fun*
+### 📸 Previews
+| DexScreener Integration | Pump.fun Integration |
+| :---: | :---: |
+| ![DexScreener](assets/example-dexscreener.png) | ![Pump.fun](assets/example-pumpfun.png) |
+
+*Visual overview of Rugsentry real-time risk assessment.*
 
 ## 🚀 Key Technical Features
 Our engineering philosophy focuses on zero-latency UX and absolute data integrity:
@@ -47,7 +54,7 @@ Make sure you have [Node.js](https://nodejs.org/) installed on your machine.
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/rugsentry-extension.git
+git clone https://github.com/KevinFalah/rugsentry-extension.git
 cd rugsentry-extension
 ```
 

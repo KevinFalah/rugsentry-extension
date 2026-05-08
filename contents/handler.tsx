@@ -4,6 +4,7 @@ import type { PlasmoCSConfig } from "plasmo"
 import { useEffect, useRef, useState } from "react"
 import type { RugCheckRisk } from "~lib/scanner-utils"
 import { calculateSecurityScore, extractCAFromUrl, fetchDexScreenerMarket, fetchRugCheckReport, resolvePairAddress, shouldResetScanner, fetchWithTimeout } from "~lib/scanner-utils"
+import rugsentryLogo from "data-base64:~assets/rugsentry-logo.png"
 export { getStyle } from "./style"
 
 const storage = new Storage({
@@ -245,7 +246,7 @@ const Handler = () => {
                     scanData.score >= 50 ? 'bg-warning/10 text-warning border-warning/20' :
                       'bg-red-500/10 text-red-500 border-red-500/20'
                     }`}>
-                    {scanData.score >= 80 ? <ShieldIcon className="w-3 h-3" /> : <AlertTriangleIcon className="w-3 h-3" />}
+                    {scanData.score >= 80 ? <img src={rugsentryLogo} className="w-3.5 h-3.5 object-contain" alt="Logo" /> : <AlertTriangleIcon className="w-3 h-3" />}
                     {scanData.score >= 80 ? 'HIGH TRUST' : scanData.score >= 50 ? 'MEDIUM RISK' : 'DANGER'}
                   </span>
                   <span className="text-slate-500 text-[10px] font-bold uppercase tracking-widest opacity-60">{isCached ? 'Cached' : 'v1.2 Live'}</span>
@@ -409,7 +410,7 @@ const Handler = () => {
         <div className={`p-1.5 rounded-full transition-colors ${status === "scanning" ? "bg-primary/20 text-primary shadow-[0_0_10px_rgba(56,189,248,0.4)]" :
           status === "done" ? (isValidCA ? "bg-success/20 text-success shadow-[0_0_10px_rgba(34,197,94,0.4)]" : "bg-warning/20 text-warning shadow-[0_0_10px_rgba(241,160,43,0.4)]") : "bg-slate-700 text-slate-400"
           }`}>
-          {status === "scanning" ? <LoaderIcon className="w-4 h-4" /> : (status === "done" && !isValidCA ? <AlertTriangleIcon className="w-4 h-4" /> : <ShieldIcon className="w-4 h-4" />)}
+          {status === "scanning" ? <LoaderIcon className="w-4 h-4" /> : (status === "done" && !isValidCA ? <AlertTriangleIcon className="w-4 h-4" /> : <img src={rugsentryLogo} className="w-5 h-5 object-contain" alt="Logo" />)}
         </div>
         <div className="flex flex-col items-start leading-tight">
           <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">

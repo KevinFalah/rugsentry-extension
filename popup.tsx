@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Shield, Zap, X, History, Bell } from "lucide-react"
+import rugsentryLogo from "url:~assets/rugsentry-logo.png"
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 import "./style.css"
@@ -41,12 +42,12 @@ function IndexPopup() {
       {/* Header */}
       <div className="flex items-center justify-between p-4 pb-2">
         <div className="flex items-center gap-2">
-          <div className="bg-primary p-1.5 rounded-lg text-neutral">
-            <Shield className="w-5 h-5 fill-current" />
+          <div className="bg-primary/10 p-1 rounded-lg">
+            <img src={rugsentryLogo} className="w-7 h-7 object-contain" alt="Logo" />
           </div>
           <h1 className="text-white font-bold text-base">Rugsentry Home</h1>
         </div>
-        <button 
+        <button
           onClick={() => window.close()}
           className="text-slate-400 hover:text-white transition-colors"
         >
@@ -82,7 +83,7 @@ function IndexPopup() {
             <h3 className="text-[10px] font-bold text-slate-500 mb-3 uppercase tracking-widest">
               RECENT SCANS
             </h3>
-            
+
             {(history || []).length > 0 ? (
               <div className="space-y-2">
                 {(history || []).slice(0, 3).map((item) => (
@@ -109,9 +110,8 @@ function IndexPopup() {
                           </span>
                           {/* Indikator Risiko */}
                           <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              item.risk === "low" ? "bg-success" : "bg-red-500"
-                            }`}
+                            className={`w-1.5 h-1.5 rounded-full ${item.risk === "low" ? "bg-success" : "bg-red-500"
+                              }`}
                           ></span>
                         </div>
                         {/* Timestamp */}
@@ -121,7 +121,7 @@ function IndexPopup() {
                       </div>
                     </div>
                     {/* Tombol Re-scan */}
-                    <button 
+                    <button
                       onClick={() => handleRescan(item.url)}
                       className="px-3 py-1.5 text-xs font-medium text-primary border border-primary/20 rounded-lg hover:bg-primary/10 transition-colors"
                     >
@@ -152,7 +152,7 @@ function IndexPopup() {
               FULL HISTORY
             </h3>
             {(history || []).length > 0 && (
-              <button 
+              <button
                 onClick={handleClearHistory}
                 className="text-[10px] font-bold text-red-500/80 hover:text-red-400 transition-colors uppercase tracking-widest"
               >
@@ -185,7 +185,7 @@ function IndexPopup() {
                       <div className="text-[10px] font-medium text-slate-500">{item.timestamp}</div>
                     </div>
                   </div>
-                  <button 
+                  <button
                     onClick={() => handleRescan(item.url)}
                     className="px-3 py-1.5 text-xs font-medium text-primary border border-primary/20 rounded-lg hover:bg-primary/10 transition-colors"
                   >
@@ -208,7 +208,7 @@ function IndexPopup() {
       {activeTab === "alerts" && (
         <div className="flex-1 flex flex-col items-center justify-center px-4 text-center">
           <div className="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center mb-4">
-             <Bell className="w-8 h-8 text-slate-500" />
+            <Bell className="w-8 h-8 text-slate-500" />
           </div>
           <h2 className="text-white font-bold mb-2">No New Alerts</h2>
           <p className="text-sm text-slate-400">
@@ -219,21 +219,21 @@ function IndexPopup() {
 
       {/* Navigation */}
       <div className="mt-auto border-t border-slate-800 bg-neutral py-2 flex justify-around rounded-b-xl">
-        <button 
+        <button
           onClick={() => setActiveTab("scan")}
           className={`flex flex-col items-center gap-1 p-2 transition-colors ${activeTab === "scan" ? "text-primary" : "text-slate-500 hover:text-slate-300"}`}
         >
           <Shield className={`w-5 h-5 ${activeTab === "scan" ? "fill-current/20" : ""}`} />
           <span className="text-[9px] font-bold tracking-wider">SCAN</span>
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab("history")}
           className={`flex flex-col items-center gap-1 p-2 transition-colors ${activeTab === "history" ? "text-primary" : "text-slate-500 hover:text-slate-300"}`}
         >
           <History className={`w-5 h-5 ${activeTab === "history" ? "fill-current/20" : ""}`} />
           <span className="text-[9px] font-bold tracking-wider">HISTORY</span>
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab("alerts")}
           className={`flex flex-col items-center gap-1 p-2 transition-colors ${activeTab === "alerts" ? "text-primary" : "text-slate-500 hover:text-slate-300"}`}
         >
