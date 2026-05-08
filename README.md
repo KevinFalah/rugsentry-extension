@@ -6,7 +6,7 @@
 ![Platform](https://img.shields.io/badge/platform-Chrome-orange)
 ![Engine](https://img.shields.io/badge/security-dual--engine-red)
 
-![Rugsentry Banner](assets/banner-docs.jpeg)
+![Rugsentry Banner](assets/banner.jpeg)
 
 ## 📖 Overview
 Rugsentry is a high-performance, context-aware Chrome extension built specifically for the Solana ecosystem. It acts as an automated security auditor right in your browser, shielding traders from the most common and devastating DeFi vectors: **Rugpulls, Honeypots, and Illiquid Traps**. 
