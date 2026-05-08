@@ -68,11 +68,19 @@ const LoaderIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 )
 
+const CopyIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+  </svg>
+)
+
 const Handler = () => {
   const [isOpen, setIsOpen] = useState(false)
   const [status, setStatus] = useState<"idle" | "scanning" | "done">("idle")
   const [ca, setCa] = useState("")
   const [currentUrl, setCurrentUrl] = useState(window.location.href)
+  const [copied, setCopied] = useState(false)
   const scanIdRef = useRef(0) // Race condition guard
   const [isCached, setIsCached] = useState(false)
   const [showBadge] = useStorage("show_badge", true)
@@ -113,6 +121,13 @@ const Handler = () => {
     const interval = setInterval(checkUrlChange, 1000)
     return () => clearInterval(interval)
   }, [currentUrl])
+
+  const handleCopy = () => {
+    if (!ca) return
+    navigator.clipboard.writeText(ca)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const handleScan = async () => {
     if (status === "scanning") return
@@ -235,9 +250,25 @@ const Handler = () => {
               </h2>
               {isValidCA && (
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-400 text-[11px] font-mono bg-slate-800/50 px-1.5 py-0.5 rounded">
-                    {shortenedCA}
-                  </span>
+                  <button
+                    onClick={handleCopy}
+                    className="group flex items-center gap-1.5 text-slate-400 hover:text-primary transition-colors bg-slate-800/50 hover:bg-primary/10 px-1.5 py-0.5 rounded border border-transparent hover:border-primary/20"
+                    title="Click to copy CA"
+                  >
+                    <span className="text-[11px] font-mono leading-none">
+                      {shortenedCA}
+                    </span>
+                    {copied ? (
+                      <CheckCircleIcon className="w-3 h-3 text-success animate-in zoom-in duration-300" />
+                    ) : (
+                      <CopyIcon className="w-2.5 h-2.5 opacity-40 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </button>
+                  {copied && (
+                    <span className="text-[10px] text-success font-bold animate-in fade-in slide-in-from-left-1 duration-300">
+                      Copied!
+                    </span>
+                  )}
                 </div>
               )}
               {isValidCA && (
