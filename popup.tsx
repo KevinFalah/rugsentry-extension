@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Shield, Zap, X, History, Bell } from "lucide-react"
+import { Shield, Zap, X, History } from "lucide-react"
 import rugsentryLogo from "url:~assets/rugsentry-logo.png"
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
@@ -17,7 +17,7 @@ interface ScanHistory {
 const localStorage = new Storage({ area: "local" })
 
 function IndexPopup() {
-  const [activeTab, setActiveTab] = useState<"scan" | "history" | "alerts">("scan")
+  const [activeTab, setActiveTab] = useState<"scan" | "history">("scan")
   const [showBadge, setShowBadge] = useStorage("show_badge", true)
   const [history, setHistory] = useStorage<ScanHistory[]>(
     {
@@ -205,40 +205,22 @@ function IndexPopup() {
         </div>
       )}
 
-      {activeTab === "alerts" && (
-        <div className="flex-1 flex flex-col items-center justify-center px-4 text-center">
-          <div className="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center mb-4">
-            <Bell className="w-8 h-8 text-slate-500" />
-          </div>
-          <h2 className="text-white font-bold mb-2">No New Alerts</h2>
-          <p className="text-sm text-slate-400">
-            You will be notified here if any suspicious activity is detected on your watched tokens.
-          </p>
-        </div>
-      )}
 
       {/* Navigation */}
       <div className="mt-auto border-t border-slate-800 bg-neutral py-2 flex justify-around rounded-b-xl">
         <button
           onClick={() => setActiveTab("scan")}
-          className={`flex flex-col items-center gap-1 p-2 transition-colors ${activeTab === "scan" ? "text-primary" : "text-slate-500 hover:text-slate-300"}`}
+          className={`flex-1 flex flex-col items-center gap-1 p-2 transition-colors ${activeTab === "scan" ? "text-primary" : "text-slate-500 hover:text-slate-300"}`}
         >
           <Shield className={`w-5 h-5 ${activeTab === "scan" ? "fill-current/20" : ""}`} />
           <span className="text-[9px] font-bold tracking-wider">SCAN</span>
         </button>
         <button
           onClick={() => setActiveTab("history")}
-          className={`flex flex-col items-center gap-1 p-2 transition-colors ${activeTab === "history" ? "text-primary" : "text-slate-500 hover:text-slate-300"}`}
+          className={`flex-1 flex flex-col items-center gap-1 p-2 transition-colors ${activeTab === "history" ? "text-primary" : "text-slate-500 hover:text-slate-300"}`}
         >
           <History className={`w-5 h-5 ${activeTab === "history" ? "fill-current/20" : ""}`} />
           <span className="text-[9px] font-bold tracking-wider">HISTORY</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("alerts")}
-          className={`flex flex-col items-center gap-1 p-2 transition-colors ${activeTab === "alerts" ? "text-primary" : "text-slate-500 hover:text-slate-300"}`}
-        >
-          <Bell className={`w-5 h-5 ${activeTab === "alerts" ? "fill-current/20" : ""}`} />
-          <span className="text-[9px] font-bold tracking-wider">ALERTS</span>
         </button>
       </div>
     </div>
