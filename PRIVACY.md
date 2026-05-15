@@ -1,0 +1,1 @@
+Rugsentry does not collect personal data. We only process token addresses to provide security scores via public APIs.
