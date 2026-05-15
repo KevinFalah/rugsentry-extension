@@ -32,7 +32,9 @@
   },
   "manifest": {
     "host_permissions": [
-      "https://*/*"
+      "https://api.gopluslabs.io/*",
+      "https://api.rugcheck.xyz/*",
+      "https://api.dexscreener.com/*"
     ],
     "permissions": [
       "storage"
