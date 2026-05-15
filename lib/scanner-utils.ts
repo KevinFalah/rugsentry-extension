@@ -57,6 +57,9 @@ export const extractCAFromUrl = (url: string): string => {
     const parts = url.split("/")
     detectedCa = parts[parts.length - 1] || ""
   }
+  if (detectedCa) {
+    detectedCa = detectedCa.split("?")[0].split("#")[0]
+  }
 
   return detectedCa.length >= 32 ? detectedCa : ""
 }
