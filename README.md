@@ -1,5 +1,5 @@
 # Rugsentry
-> **The Ultimate Real-time Security Shield for Solana Traders**
+> **The Ultimate Real-time Security Shield for Memecoin Traders**
 
 ![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
