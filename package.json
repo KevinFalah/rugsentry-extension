@@ -1,7 +1,7 @@
 {
   "name": "rugsentry-extension",
   "displayName": "Rugsentry: Web3 Security Shield",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Real-time Risk Scoring & Anti-Trap Shield for Memecoin Traders.",
   "author": "KevinFalah",
   "scripts": {
