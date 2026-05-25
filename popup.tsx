@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Shield, Zap, X, History } from "lucide-react"
-import rugsentryLogo from "url:~assets/rugsentry-logo.png"
+import rugsentryLogo from "url:~assets/icon.png"
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 import "./style.css"

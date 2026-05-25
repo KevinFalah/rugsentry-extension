@@ -4,7 +4,7 @@ import type { PlasmoCSConfig } from "plasmo"
 import { useEffect, useRef, useState } from "react"
 import type { RugCheckRisk } from "~lib/scanner-utils"
 import { calculateSecurityScore, extractCAFromUrl, fetchDexScreenerMarket, fetchRugCheckReport, resolvePairAddress, shouldResetScanner, fetchWithTimeout } from "~lib/scanner-utils"
-import rugsentryLogo from "data-base64:~assets/rugsentry-logo.png"
+import rugsentryLogo from "data-base64:~assets/icon.png"
 import { AlertTriangleIcon, CheckCircleIcon, CloseIcon, CopyIcon, LoaderIcon, RefreshCwIcon } from "./Icons"
 export { getStyle } from "./style"
 
